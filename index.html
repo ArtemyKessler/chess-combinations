@@ -469,7 +469,7 @@ document.addEventListener('click',e=>{
 });
 document.addEventListener('mouseover',e=>{const el=e.target.closest('[data-grp]');const g=el?+el.dataset.grp:-1;if(g!==hot){hot=g;renderBoard()}});
 
-S=demoState();render();
+S=initState();render();
 </script>
 
 </body>
