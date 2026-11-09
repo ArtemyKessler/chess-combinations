@@ -1,15 +1,15 @@
 <!doctype html>
-<html lang="ru">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="description" content="Шахматы-комбинации: вариант шахмат, где очки дают узоры из фигур, а взятые фигуры уходят в резерв.">
+<meta name="description" content="Chess Combinations: a chess variant where you score by arranging your pieces into patterns, and captured pieces go to a reserve instead of leaving the game.">
 <style>
 :root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 body{margin:0;font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
 img{max-width:100%}[hidden]{display:none!important}
 </style>
-<title>Шахматы-комбинации</title>
+<title>Chess Combinations</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Forum&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
@@ -40,13 +40,14 @@ body{font-family:var(--f-body);font-size:14px;line-height:1.45;padding-block:20p
 .wrap{max-width:1040px;margin:0 auto;display:grid;grid-template-columns:minmax(0,560px) minmax(0,1fr);gap:28px;align-items:start}
 @media (max-width:820px){.wrap{grid-template-columns:minmax(0,1fr)}}
 header{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 16px}
+header .seg{margin-left:auto;align-self:center}
 h1{font-family:var(--f-display);font-weight:400;font-size:2rem;margin:0;letter-spacing:.01em;text-wrap:balance}
 header p{margin:0;color:var(--muted)}
 /* board */
 .stage{min-width:0}
 .board{container-type:inline-size;width:100%;aspect-ratio:1;max-width:100%;display:grid;
   grid-template-columns:repeat(8,minmax(0,1fr));grid-template-rows:repeat(8,minmax(0,1fr));
-  border:2px solid var(--line);border-radius:4px;overflow:hidden;user-select:none;box-sizing:border-box}
+  border:2px solid var(--line);border-radius:4px;overflow:hidden;user-select:none;-webkit-user-select:none;box-sizing:border-box;touch-action:none}
 .sq{position:relative;border:0;padding:0;margin:0;min-width:0;min-height:0;overflow:hidden;font:inherit;cursor:pointer;display:grid;place-items:center;font-size:9cqw;line-height:1;color:inherit;-webkit-tap-highlight-color:transparent}
 .sq.lt{background:var(--sq-l)}.sq.dk{background:var(--sq-d)}
 .sq.home::before{content:"";position:absolute;inset:0;background:repeating-linear-gradient(135deg,var(--home) 0 3px,transparent 3px 9px);pointer-events:none}
@@ -58,6 +59,13 @@ header p{margin:0;color:var(--muted)}
 .sq .dot{position:absolute;width:26%;height:26%;border-radius:50%;background:var(--sel-soft);pointer-events:none}
 .sq.cap .dot{width:86%;height:86%;background:transparent;border:4px solid var(--sel-soft);box-sizing:border-box}
 .sq:focus-visible{outline:3px solid var(--sel);outline-offset:-3px;z-index:2}
+.sq.own{cursor:grab}
+.sq.lift .pc{opacity:.25}
+.sq.over{box-shadow:inset 0 0 0 4px var(--sel)}
+body.dragging,body.dragging *{cursor:grabbing!important}
+.ghost{position:fixed;left:0;top:0;z-index:50;pointer-events:none;display:grid;place-items:center;line-height:1;
+  transform:translate(-50%,-50%) scale(1.12);filter:drop-shadow(0 6px 8px rgba(0,0,0,.35))}
+.chip[data-act="res"]{touch-action:none;cursor:grab}
 .pc{position:relative;z-index:1;font-family:"Segoe UI Symbol","Noto Sans Symbols 2","DejaVu Sans",serif;font-variant-emoji:text}
 .pc.w{color:var(--pw);text-shadow:0 0 1px #111,0 0 1px #111,0 1px 1px #111,1px 0 0 #111,-1px 0 0 #111,0 -1px 0 #111}
 .pc.b{color:var(--pb);text-shadow:0 0 1px rgba(255,255,255,.35)}
@@ -129,16 +137,19 @@ table.pts-t td{border:1px solid var(--line);padding:3px 8px;text-align:center}
 </head>
 <body>
 <div class="wrap">
-  <header>
-    <h1>Шахматы-комбинации</h1>
-    <p>Прототип правил v0.2 · игра вдвоём за одним экраном</p>
+  <header id="top">
+    <h1 id="h-title">Chess Combinations</h1>
+    <p id="h-sub">Rules prototype v0.2 · two players, one screen</p>
+    <div class="seg" role="group" aria-label="Language" id="lang-seg">
+      <button data-act="lang" data-l="en" class="on" aria-pressed="true">EN</button><button data-act="lang" data-l="ru" aria-pressed="false">RU</button>
+    </div>
   </header>
   <div class="stage">
-    <div class="board" id="board" role="grid" aria-label="Доска"></div>
+    <div class="board" id="board" role="grid" aria-label="Board"></div>
     <div class="legend">
-      <span><i class="sw h"></i>начальные горизонтали</span>
-      <span><i class="sw g"></i>ваша комбинация</span>
-      <span><i class="sw o"></i>комбинация соперника</span>
+      <span><i class="sw h"></i><span id="lg-home">starting ranks</span></span>
+      <span><i class="sw g"></i><span id="lg-me">your combination</span></span>
+      <span><i class="sw o"></i><span id="lg-op">opponent's combination</span></span>
     </div>
   </div>
   <div class="panel" id="panel"></div>
@@ -146,11 +157,9 @@ table.pts-t td{border:1px solid var(--line);padding:3px 8px;text-align:center}
 
 <script>
 const FILES='abcdefgh';
-const MODES={cat:{target:25,label:'Каталог'},size:{target:15,label:'По размеру'}};
+const MODES={cat:{target:25},size:{target:15}};
 let mode='cat';
 const target=()=>MODES[mode].target;
-const NAMES={K:'король',Q:'ферзь',R:'ладья',B:'слон',N:'конь',P:'пешка'};
-const ACC={K:'короля',Q:'ферзя',R:'ладью',B:'слона',N:'коня',P:'пешку'};
 const LET={K:'K',Q:'Q',R:'R',B:'B',N:'N',P:''};
 const GL={K:'♚',Q:'♛',R:'♜',B:'♝',N:'♞',P:'♟'};
 const glyph=t=>GL[t]+'︎';
@@ -161,23 +170,117 @@ const isHome=(col,r)=>col==='w'?r>=6:r<=1;
 const lastRow=col=>col==='w'?0:7;
 const pawnRow=col=>col==='w'?6:1;
 const sizePts=n=>1+(n-4)*(n-3)/2;
-const who=c=>c==='w'?'белых':'чёрных';
-const Who=c=>c==='w'?'Белые':'Чёрные';
+
+/* ---------- языки ---------- */
+const I18N={
+  en:{
+    title:'Chess Combinations',sub:'Rules prototype v0.2 · two players, one screen',
+    board:'Board',lgHome:'starting ranks',lgMe:'your combination',lgOp:"opponent's combination",language:'Language',
+    piece:{K:'king',Q:'queen',R:'rook',B:'bishop',N:'knight',P:'pawn'},
+    pieceA:{K:'king',Q:'queen',R:'rook',B:'bishop',N:'knight',P:'pawn'},
+    colorAdj:c=>c==='w'?'white':'black',
+    Who:c=>c==='w'?'White':'Black',who:c=>c==='w'?'White':'Black',
+    lightSq:'light-squared',darkSq:'dark-squared',
+    modeCat:'Catalog',modeSize:'By size',scoring:'Scoring',scoringMode:'Scoring mode',
+    toMove:'to move',
+    win:(c,a,b)=>`${c==='w'?'White':'Black'} win, ${a} : ${b}.`,draw:(a,b)=>`Draw, ${a} : ${b}.`,
+    finalBanner:(reached,T,mine,f)=>`${reached} reached ${T}. `+(mine?'This is your last move.':`${f} get one last move.`),
+    stPromo:'Promotion: choose a piece from your reserve to replace the pawn.',
+    stPlace:'Choose a square on your starting ranks.',
+    stTurn:(c,n,can)=>`${c==='w'?'White':'Black'} to move, move ${n}. `+(can?'You can cash in combinations, then take one action.':'One action: move a piece or bring one in from your reserve.'),
+    swap:'Swap from reserve',keepPawn:'Keep the pawn',cancel:'Cancel',
+    cashIn:'Cash in',plusKing:' + king',
+    cashNote:(cat,multi)=>`Cashing in doesn't use your move. The combination's pieces${cat?' and the king next to it':''} go to your reserve.${multi?' If combinations share pieces, cashing one breaks the other.':''}`,
+    noneCat:'No catalog patterns assembled yet.',
+    noneSize:'No combinations yet: you need 4+ connected pieces outside your starting ranks.',
+    oppHas:(c,list)=>`${c==='w'?'White':'Black'} have assembled: ${list}. Break it, or they cash it in next move.`,
+    promoteLater:'Promote pawn (uses your move)',
+    reserve:'Reserve',reserveHint:' · tap a piece or drag it onto the board',empty:'empty',
+    undo:'Undo move',newGame:'New game',demo:'Example position',flip:'Flip board',
+    catalog:'Combination catalog',scale:'Point scale',withKing:n=>`with king +${n}`,
+    catNote:'Patterns can be rotated and mirrored. A dot means any of your pieces except the king. An empty frame means the square must be empty. The king scores with a pattern when it stands next to it outside your starting ranks.',
+    pieces:'pieces',points:'points',sizeNote:'Any connected group of 4+ of your pieces outside your starting ranks.',
+    sizeLabel:n=>`${n} pieces`,
+    log:'Game log',logEmpty:'The game has just started.',
+    rules:'Rules in brief',
+    rulesList:(cat,T)=>[
+      'Pieces move as in chess. A captured piece is not removed: it goes to its owner\'s reserve. The king cannot be captured. There is no check or checkmate.',
+      cat?'A combination is a pattern from the catalog, with all its pieces outside your starting ranks. A king next to the pattern raises its score.':'A combination is 4+ of your pieces connected like king moves, all outside your starting ranks.',
+      'At the start of your turn you may cash in any of your complete combinations for free, then take one action: move a piece or bring one in from your reserve.',
+      'A reserve piece goes on any empty square of your two starting ranks; a bishop on its own colour, a pawn on your second rank.',
+      'A pawn on the last rank swaps for any piece from your reserve.',
+      `The first to reach ${T} wins, unless the opponent scores more on their last move.`],
+    logMove:(txt,cap,ep)=>txt+(cap?` — ${I18N.en.piece[cap]} to reserve`:ep?' — en passant, pawn to reserve':''),
+    logPlace:(t,s)=>`${LET[t]}@${s} — ${I18N.en.piece[t]} from reserve`,
+    logPromo:(s,t)=>`${s}: pawn swapped for a ${I18N.en.piece[t]} from reserve`,
+    logKeep:'pawn stays a pawn',
+    logCash:(name,king,pts)=>`cashed in: ${name}${king?' with king':''}, +${pts}`,
+    logDemo:'Example position: scores and reserves are illustrative.',
+  },
+  ru:{
+    title:'Шахматы-комбинации',sub:'Прототип правил v0.2 · игра вдвоём за одним экраном',
+    board:'Доска',lgHome:'начальные горизонтали',lgMe:'ваша комбинация',lgOp:'комбинация соперника',language:'Язык',
+    piece:{K:'король',Q:'ферзь',R:'ладья',B:'слон',N:'конь',P:'пешка'},
+    pieceA:{K:'короля',Q:'ферзя',R:'ладью',B:'слона',N:'коня',P:'пешку'},
+    colorAdj:c=>c==='w'?'белый':'чёрный',
+    Who:c=>c==='w'?'Белые':'Чёрные',who:c=>c==='w'?'белых':'чёрных',
+    lightSq:'светлопольный',darkSq:'темнопольный',
+    modeCat:'Каталог',modeSize:'По размеру',scoring:'Подсчёт',scoringMode:'Режим подсчёта',
+    toMove:'ходят',
+    win:(c,a,b)=>`Победа ${c==='w'?'белых':'чёрных'}: ${a} : ${b}.`,draw:(a,b)=>`Ничья, ${a} : ${b}.`,
+    finalBanner:(reached,T,mine,f)=>`${reached} набрали ${T}. `+(mine?'Это ваш последний ход.':`У ${f} будет последний ход.`),
+    stPromo:'Превращение: выберите фигуру из резерва, которая встанет на место пешки.',
+    stPlace:'Выберите клетку на своих начальных горизонталях.',
+    stTurn:(c,n,can)=>`Ход ${c==='w'?'белых':'чёрных'}, № ${n}. `+(can?'Можно засчитать комбинации, затем одно действие.':'Одно действие: ход фигурой или фигура из резерва.'),
+    swap:'Обмен с резервом',keepPawn:'Оставить пешку',cancel:'Отмена',
+    cashIn:'Засчитать',plusKing:' + король',
+    cashNote:(cat,multi)=>`Засчёт не тратит ход. Фигуры комбинации${cat?' и король рядом с ней':''} уходят в резерв.${multi?' Если комбинации делят фигуры, после засчёта одной другая исчезнет.':''}`,
+    noneCat:'Собранных узоров из каталога нет.',
+    noneSize:'Собранных комбинаций нет: нужно 4+ связанные фигуры вне начальных горизонталей.',
+    oppHas:(c,list)=>`У ${c==='w'?'белых':'чёрных'} собрано: ${list}. Если не сломать, засчитают следующим ходом.`,
+    promoteLater:'Превратить пешку (действие хода)',
+    reserve:'Резерв',reserveHint:' · нажмите или перетащите фигуру на доску',empty:'пусто',
+    undo:'Отменить ход',newGame:'Новая партия',demo:'Пример позиции',flip:'Перевернуть доску',
+    catalog:'Каталог комбинаций',scale:'Шкала очков',withKing:n=>`с королём +${n}`,
+    catNote:'Узоры можно поворачивать и отражать. Кружок — любая своя фигура, кроме короля. Пустая рамка — клетка должна быть пустой. Король засчитывается вместе с узором, если стоит рядом с ним вне начальных горизонталей.',
+    pieces:'фигур',points:'очков',sizeNote:'Любая связная группа из 4+ своих фигур вне начальных горизонталей.',
+    sizeLabel:n=>`${n} фигур`,
+    log:'Ход партии',logEmpty:'Партия только началась.',
+    rules:'Правила коротко',
+    rulesList:(cat,T)=>[
+      'Ходы как в шахматах. Взятая фигура не снимается, а уходит в резерв владельца. Короля взять нельзя. Шаха и мата нет.',
+      cat?'Комбинация — узор из каталога; все его фигуры вне своих начальных горизонталей. Король рядом с узором увеличивает очки.':'Комбинация: 4+ своих фигуры, связанные как ходы короля, все вне своих начальных горизонталей.',
+      'В начале хода можно засчитать любые свои комбинации целиком (бесплатно), затем одно действие: ход фигурой или выставление из резерва.',
+      'Из резерва фигура ставится на свободную клетку своих двух начальных горизонталей; слон на свой цвет, пешка на вторую горизонталь.',
+      'Пешка на последней горизонтали обменивается на любую фигуру из резерва.',
+      `Кто первым набрал ${T}, тот победит, если соперник за последний ход не наберёт больше.`],
+    logMove:(txt,cap,ep)=>txt+(cap?` — ${I18N.ru.piece[cap]} в резерв`:ep?' — на проходе, пешка в резерв':''),
+    logPlace:(t,s)=>`${LET[t]}@${s} — ${I18N.ru.piece[t]} из резерва`,
+    logPromo:(s,t)=>`${s}: пешка обменяна на ${I18N.ru.pieceA[t]} из резерва`,
+    logKeep:'пешка остаётся пешкой',
+    logCash:(name,king,pts)=>`засчёт: ${name}${king?' с королём':''}, +${pts}`,
+    logDemo:'Пример позиции: очки и резерв условные.',
+  }
+};
+let lang='en';
+try{const v=localStorage.getItem('cc-lang');if(v==='en'||v==='ru')lang=v}catch(e){}
+const L=()=>I18N[lang];
 
 /* Каталог. Строки: первая — дальше от своей стороны. '.' — не важно, 'o' — клетка пуста, '*' — любая своя фигура, кроме короля.
    Узоры можно поворачивать и отражать. pts / ptsK — очки без короля и с королём рядом. */
 const CATALOG=[
-  {id:'zastava',name:'Застава',rows:['.N.','P.P'],pts:2,ptsK:4},
-  {id:'falanga',name:'Фаланга',rows:['PPPP'],pts:4,ptsK:6},
-  {id:'pushka',name:'Пушка Алехина',rows:['R','R','Q'],pts:4,ptsK:7},
-  {id:'bastion',name:'Бастион',rows:['.N.','PRP'],pts:6,ptsK:9},
-  {id:'parad',name:'Парад',rows:['RNBQ'],pts:6,ptsK:9},
-  {id:'brigada',name:'Лёгкая бригада',rows:['NN','BB'],pts:7,ptsK:11},
-  {id:'stena',name:'Стена',rows:['PPPPPP'],pts:8,ptsK:12},
-  {id:'tsep',name:'Цепь',rows:['...P','..P.','.P..','P...'],pts:8,ptsK:12},
-  {id:'polk',name:'Полк',rows:['NN','BB','RR'],pts:17,ptsK:23},
-  {id:'kare',name:'Каре',rows:['***','*o*','***'],pts:18,ptsK:24},
+  {id:'zastava',name:{en:'Outpost',ru:'Застава'},rows:['.N.','P.P'],pts:2,ptsK:4},
+  {id:'falanga',name:{en:'Phalanx',ru:'Фаланга'},rows:['PPPP'],pts:4,ptsK:6},
+  {id:'pushka',name:{en:"Alekhine's Gun",ru:'Пушка Алехина'},rows:['R','R','Q'],pts:4,ptsK:7},
+  {id:'bastion',name:{en:'Bastion',ru:'Бастион'},rows:['.N.','PRP'],pts:6,ptsK:9},
+  {id:'parad',name:{en:'Parade',ru:'Парад'},rows:['RNBQ'],pts:6,ptsK:9},
+  {id:'brigada',name:{en:'Light Brigade',ru:'Лёгкая бригада'},rows:['NN','BB'],pts:7,ptsK:11},
+  {id:'stena',name:{en:'Wall',ru:'Стена'},rows:['PPPPPP'],pts:8,ptsK:12},
+  {id:'tsep',name:{en:'Chain',ru:'Цепь'},rows:['...P','..P.','.P..','P...'],pts:8,ptsK:12},
+  {id:'polk',name:{en:'Regiment',ru:'Полк'},rows:['NN','BB','RR'],pts:17,ptsK:23},
+  {id:'kare',name:{en:'Square',ru:'Каре'},rows:['***','*o*','***'],pts:18,ptsK:24},
 ];
+const CAT_BY_ID=Object.fromEntries(CATALOG.map(p=>[p.id,p]));
 function variants(rows){
   const base=[];rows.forEach((row,i)=>[...row].forEach((ch,j)=>{if(ch!=='.')base.push([i,j,ch])}));
   const T=[(a,b)=>[a,b],(a,b)=>[a,-b],(a,b)=>[-a,b],(a,b)=>[-a,-b],(a,b)=>[b,a],(a,b)=>[b,-a],(a,b)=>[-b,a],(a,b)=>[-b,-a]];
@@ -191,6 +294,7 @@ function variants(rows){
 CATALOG.forEach(p=>{p.vars=variants(p.rows);p.n=p.rows.join('').replace(/[.o]/g,'').length});
 
 let S,hist=[],sel=null,moves=[],selRes=null,placeT=[],hot=-1,flipped=false;
+let drag=null,suppressClick=false;
 
 function blank(){return Array.from({length:8},()=>Array(8).fill(null))}
 function mk(t,c,r,f,moved=false){const p={t,c,moved};if(t==='B')p.lt=(r+f)%2===0;return p}
@@ -212,13 +316,25 @@ function demoState(){
   ['e5','f5','g5','h5'].forEach(x=>put(x,'P','b'));put('f6','N','b');
   s.reserve.w=[{t:'P',c:'w'},{t:'P',c:'w'}];s.reserve.b=[];
   s.score={w:4,b:6};s.moveNo=12;
-  s.log=[{n:0,c:'',x:'Пример позиции: очки и резерв условные.'}];
+  s.log=[{n:0,c:'',k:'demo'}];
   return s;
 }
 function snap(){hist.push(JSON.stringify(S));if(hist.length>300)hist.shift()}
 function undo(){if(!hist.length)return;S=JSON.parse(hist.pop());clearSel();hot=-1;render()}
 function clearSel(){sel=null;moves=[];selRes=null;placeT=[]}
-function log(x){S.log.push({n:S.moveNo,c:S.turn,x})}
+function log(e){e.n=S.moveNo;e.c=S.turn;S.log.push(e)}
+function logText(e){const l=L();
+  switch(e.k){
+    case 'move':return l.logMove(e.txt,e.cap,e.ep);
+    case 'castle':return e.long?'0-0-0':'0-0';
+    case 'place':return l.logPlace(e.t,e.sq);
+    case 'promo':return l.logPromo(e.sq,e.t);
+    case 'keep':return l.logKeep;
+    case 'cash':return l.logCash(e.pid?CAT_BY_ID[e.pid].name[lang]:l.sizeLabel(e.size),e.king,e.pts);
+    case 'demo':return l.logDemo;
+  }
+  return e.x||'';
+}
 
 function genMoves(r,c){
   const B=S.board,p=B[r][c],res=[];
@@ -251,20 +367,20 @@ function toReserve(t){const o={t:t.t,c:t.c};if(t.t==='B')o.lt=t.lt;S.reserve[t.c
 const hasPromo=col=>S.reserve[col].some(x=>x.t!=='P');
 
 function doMove(fr,fc,m){
-  snap();const B=S.board,p=B[fr][fc];let note='';
-  if(m.cap){const t=B[m.r][m.c];toReserve(t);note=` — ${NAMES[t.t]} в резерв`}
-  if(m.ep){toReserve(B[m.ep.r][m.ep.c]);B[m.ep.r][m.ep.c]=null;note=' — на проходе, пешка в резерв'}
+  snap();const B=S.board,p=B[fr][fc];let cap=null;
+  if(m.cap){const t=B[m.r][m.c];toReserve(t);cap=t.t}
+  if(m.ep){toReserve(B[m.ep.r][m.ep.c]);B[m.ep.r][m.ep.c]=null}
   B[m.r][m.c]=p;B[fr][fc]=null;p.moved=true;
-  let txt=`${LET[p.t]}${sq(fr,fc)}${m.cap||m.ep?'×':'–'}${sq(m.r,m.c)}${note}`;
-  if(m.castle){const rk=B[fr][m.castle.from];B[fr][m.castle.to]=rk;B[fr][m.castle.from]=null;rk.moved=true;txt=m.castle.from===7?'0-0':'0-0-0'}
-  S.ep=m.dbl?{r:(fr+m.r)/2,c:fc}:null;S.last=[[fr,fc],[m.r,m.c]];log(txt);
+  if(m.castle){const rk=B[fr][m.castle.from];B[fr][m.castle.to]=rk;B[fr][m.castle.from]=null;rk.moved=true;log({k:'castle',long:m.castle.from===0})}
+  else log({k:'move',txt:`${LET[p.t]}${sq(fr,fc)}${m.cap||m.ep?'×':'–'}${sq(m.r,m.c)}`,cap,ep:!!m.ep});
+  S.ep=m.dbl?{r:(fr+m.r)/2,c:fc}:null;S.last=[[fr,fc],[m.r,m.c]];
   if(p.t==='P'&&m.r===lastRow(p.c)&&hasPromo(p.c)){S.promo={r:m.r,c:m.c,fresh:true};clearSel();render();return}
   endTurn();
 }
 function place(i,r,c){
   snap();const col=S.turn,o=S.reserve[col].splice(i,1)[0];
   const p={t:o.t,c:col,moved:o.t!=='P'};if(o.t==='B')p.lt=o.lt;
-  S.board[r][c]=p;S.ep=null;S.last=[[r,c]];log(`${LET[o.t]}@${sq(r,c)} — ${NAMES[o.t]} из резерва`);endTurn();
+  S.board[r][c]=p;S.ep=null;S.last=[[r,c]];log({k:'place',t:o.t,sq:sq(r,c)});endTurn();
 }
 function placeTargets(o){
   const col=S.turn,rows=o.t==='P'?[pawnRow(col)]:(col==='w'?[6,7]:[0,1]),out=[];
@@ -275,10 +391,10 @@ function promote(i){
   const {r,c,fresh}=S.promo;if(!fresh)snap();
   const col=S.turn,o=S.reserve[col].splice(i,1)[0],pawn=S.board[r][c];
   toReserve(pawn);const p={t:o.t,c:col,moved:true};if(o.t==='B')p.lt=(r+c)%2===0;
-  S.board[r][c]=p;log(`${sq(r,c)}: пешка обменяна на ${ACC[o.t]} из резерва`);
+  S.board[r][c]=p;log({k:'promo',sq:sq(r,c),t:o.t});
   S.promo=null;S.last=[[r,c]];endTurn();
 }
-function declinePromo(){const f=S.promo.fresh;S.promo=null;if(f){log('пешка остаётся пешкой');endTurn()}else render()}
+function declinePromo(){const f=S.promo.fresh;S.promo=null;if(f){log({k:'keep'});endTurn()}else render()}
 
 /* --- комбинации --- */
 function sizeCombos(col){
@@ -289,7 +405,7 @@ function sizeCombos(col){
     while(st.length){const[a,b]=st.pop();cells.push([a,b]);
       for(let dr=-1;dr<=1;dr++)for(let dc=-1;dc<=1;dc++){const x=a+dr,y=b+dc;
         if((dr||dc)&&inB(x,y)&&!seen.has(x*8+y)){const q=B[x][y];if(q&&q.c===col&&!isHome(col,x)){seen.add(x*8+y);st.push([x,y])}}}}
-    if(cells.length>=4)out.push({label:`${cells.length} фигур`,cells,pts:sizePts(cells.length),king:null,hasK:cells.some(([a,b])=>B[a][b].t==='K')});
+    if(cells.length>=4)out.push({size:cells.length,cells,pts:sizePts(cells.length),king:null});
   }
   return out.sort((a,b)=>b.pts-a.pts);
 }
@@ -310,7 +426,7 @@ function catCombos(col){
       const inSet=new Set(all.map(([r,c])=>r*8+c));let king=null;
       for(const[r,c]of cells){for(let dr=-1;dr<=1&&!king;dr++)for(let dc=-1;dc<=1&&!king;dc++){const x=r+dr,y=c+dc;
         if(inB(x,y)&&!inSet.has(x*8+y)){const q=B[x][y];if(q&&q.c===col&&q.t==='K'&&!isHome(col,x))king=[x,y]}}if(king)break}
-      found.set(key,{pid:p.id,label:p.name,cells,king,pts:king?p.ptsK:p.pts,set:new Set(cells.map(([r,c])=>r*8+c))});
+      found.set(key,{pid:p.id,cells,king,pts:king?p.ptsK:p.pts,set:new Set(cells.map(([r,c])=>r*8+c))});
     }
   }
   const list=[...found.values()];
@@ -319,12 +435,13 @@ function catCombos(col){
   return res.sort((a,b)=>b.pts-a.pts);
 }
 const combosFor=col=>mode==='cat'?catCombos(col):sizeCombos(col);
+const comboName=g=>g.pid?CAT_BY_ID[g.pid].name[lang]:L().sizeLabel(g.size);
 
 function cash(gi){
   const g=combosFor(S.turn)[gi];if(!g)return;snap();
   const cells=g.king?g.cells.concat([g.king]):g.cells;
   cells.forEach(([r,c])=>{toReserve(S.board[r][c]);S.board[r][c]=null});
-  S.score[S.turn]+=g.pts;log(`засчёт: ${g.label}${g.king?' с королём':''}, +${g.pts}`);
+  S.score[S.turn]+=g.pts;log({k:'cash',pid:g.pid||null,size:g.size||null,king:!!g.king,pts:g.pts});
   if(!S.finalFor&&S.score[S.turn]>=target())S.finalFor=opp(S.turn);
   hot=-1;clearSel();render();
 }
@@ -335,6 +452,7 @@ function endTurn(){
   if(S.turn==='b')S.moveNo++;S.turn=opp(S.turn);clearSel();render();
 }
 
+/* Клик или клавиатура по клетке. */
 function onCell(r,c){
   if(S.over||S.promo)return;
   if(selRes!==null){const t=placeT.find(x=>x.r===r&&x.c===c);if(t){place(selRes,r,c);return}clearSel();}
@@ -345,12 +463,25 @@ function onCell(r,c){
 }
 
 /* --- отрисовка --- */
+function renderStatic(){
+  const l=L();
+  document.documentElement.lang=lang;document.title=l.title;
+  document.getElementById('h-title').textContent=l.title;
+  document.getElementById('h-sub').textContent=l.sub;
+  document.getElementById('board').setAttribute('aria-label',l.board);
+  document.getElementById('lg-home').textContent=l.lgHome;
+  document.getElementById('lg-me').textContent=l.lgMe;
+  document.getElementById('lg-op').textContent=l.lgOp;
+  const seg=document.getElementById('lang-seg');seg.setAttribute('aria-label',l.language);
+  seg.querySelectorAll('button').forEach(b=>{const on=b.dataset.l===lang;b.classList.toggle('on',on);b.setAttribute('aria-pressed',on)});
+}
 function renderBoard(){
-  const B=S.board,me=S.over?[]:combosFor(S.turn),op=S.over?[]:combosFor(opp(S.turn));
+  const B=S.board,me=S.over?[]:combosFor(S.turn),op=S.over?[]:combosFor(opp(S.turn)),l=L();
   const mine=new Map(),theirs=new Set();
   me.forEach((g,i)=>(g.king?g.cells.concat([g.king]):g.cells).forEach(([r,c])=>{const k=r*8+c;if(!mine.has(k)||i===hot)mine.set(k,i)}));
   op.forEach(g=>(g.king?g.cells.concat([g.king]):g.cells).forEach(([r,c])=>theirs.add(r*8+c)));
   const last=new Set((S.last||[]).map(([r,c])=>r*8+c));
+  const canAct=!S.over&&!S.promo;
   let h='';
   for(let i=0;i<8;i++)for(let j=0;j<8;j++){
     const r=flipped?7-i:i,c=flipped?7-j:j,p=B[r][c],k=r*8+c;
@@ -360,9 +491,11 @@ function renderBoard(){
     if(mine.has(k)){cls.push('g-me');if(mine.get(k)===hot)cls.push('g-hot')}
     if(theirs.has(k))cls.push('g-op');
     if(sel&&sel[0]===r&&sel[1]===c)cls.push('sel');
+    if(canAct&&p&&p.c===S.turn)cls.push('own');
+    if(drag&&drag.active&&drag.src==='board'&&drag.r===r&&drag.c===c)cls.push('lift');
     const mv=moves.find(x=>x.r===r&&x.c===c)||placeT.find(x=>x.r===r&&x.c===c);
     if(mv&&(mv.cap||mv.ep))cls.push('cap');
-    const lab=sq(r,c)+(p?`, ${p.c==='w'?'белый':'чёрный'} ${NAMES[p.t]}`:'');
+    const lab=sq(r,c)+(p?`, ${l.colorAdj(p.c)} ${l.piece[p.t]}`:'');
     h+=`<button class="${cls.join(' ')}" data-act="cell" data-r="${r}" data-c="${c}" aria-label="${lab}">`
       +(p?`<span class="pc ${p.c}">${glyph(p.t)}</span>`:'')+(mv?'<span class="dot"></span>':'')
       +(i===7?`<span class="crd f">${FILES[c]}</span>`:'')+(j===0?`<span class="crd r">${8-r}</span>`:'')+'</button>';
@@ -371,8 +504,8 @@ function renderBoard(){
 }
 
 function chip(o,i,col,act){
-  const dk=o.t==='B'&&!o.lt;
-  const t=`${NAMES[o.t]}${o.t==='B'?(o.lt?', светлопольный':', темнопольный'):''}`;
+  const l=L(),dk=o.t==='B'&&!o.lt;
+  const t=`${l.piece[o.t]}${o.t==='B'?', '+(o.lt?l.lightSq:l.darkSq):''}`;
   return `<button class="chip ${dk?'dkb':''} ${act==='res'&&selRes===i?'on':''}" ${act?`data-act="${act}" data-i="${i}"`:'disabled'} title="${t}" aria-label="${t}"><span class="pc ${col}">${glyph(o.t)}</span></button>`;
 }
 function mini(p){
@@ -384,66 +517,62 @@ function mini(p){
   return h+'</div>';
 }
 function catalogHTML(){
-  if(mode==='cat')return `<div class="cat">${CATALOG.map(p=>`<div class="pat"><b>${p.name}</b>${mini(p)}<div class="pp"><strong>+${p.pts}</strong><span>с королём +${p.ptsK}</span></div></div>`).join('')}</div>
-    <p class="note">Узоры можно поворачивать и отражать. Кружок — любая своя фигура, кроме короля. Пустая рамка — клетка должна быть пустой. Король засчитывается вместе с узором, если стоит рядом с ним вне начальных горизонталей.</p>`;
-  return `<table class="pts-t"><tr><td>фигур</td><td>4</td><td>5</td><td>6</td><td>7</td><td>8</td><td>9</td><td>10</td></tr>
-    <tr><td>очков</td><td>1</td><td>2</td><td>4</td><td>7</td><td>11</td><td>16</td><td>22</td></tr></table>
-    <p class="note">Любая связная группа из 4+ своих фигур вне начальных горизонталей.</p>`;
+  const l=L();
+  if(mode==='cat')return `<div class="cat">${CATALOG.map(p=>`<div class="pat"><b>${p.name[lang]}</b>${mini(p)}<div class="pp"><strong>+${p.pts}</strong><span>${l.withKing(p.ptsK)}</span></div></div>`).join('')}</div>
+    <p class="note">${l.catNote}</p>`;
+  return `<table class="pts-t"><tr><td>${l.pieces}</td><td>4</td><td>5</td><td>6</td><td>7</td><td>8</td><td>9</td><td>10</td></tr>
+    <tr><td>${l.points}</td><td>1</td><td>2</td><td>4</td><td>7</td><td>11</td><td>16</td><td>22</td></tr></table>
+    <p class="note">${l.sizeNote}</p>`;
 }
 function renderPanel(){
-  const t=S.turn,me=S.over?[]:combosFor(t),op=S.over?[]:combosFor(opp(t)),T=target();
-  let h=`<div class="row" style="align-items:center;gap:10px"><span class="note" style="margin:0">Подсчёт</span><div class="seg" role="group" aria-label="Режим подсчёта">`
-    +Object.entries(MODES).map(([k,m])=>`<button data-act="mode" data-m="${k}" class="${mode===k?'on':''}" aria-pressed="${mode===k}">${m.label}</button>`).join('')+'</div></div>';
+  const l=L(),t=S.turn,me=S.over?[]:combosFor(t),op=S.over?[]:combosFor(opp(t)),T=target();
+  const label=g=>comboName(g)+(g.king?l.plusKing:'');
+  let h=`<div class="row" style="align-items:center;gap:10px"><span class="note" style="margin:0">${l.scoring}</span><div class="seg" role="group" aria-label="${l.scoringMode}">`
+    +[['cat',l.modeCat],['size',l.modeSize]].map(([k,lab])=>`<button data-act="mode" data-m="${k}" class="${mode===k?'on':''}" aria-pressed="${mode===k}">${lab}</button>`).join('')+'</div></div>';
   h+='<div class="scores">';
   for(const col of['w','b']){const sc=S.score[col];
-    h+=`<div class="sc ${!S.over&&t===col?'on':''}"><div class="nm">${Who(col)}<small>${!S.over&&t===col?'ходят':''}</small></div>
+    h+=`<div class="sc ${!S.over&&t===col?'on':''}"><div class="nm">${l.Who(col)}<small>${!S.over&&t===col?l.toMove:''}</small></div>
     <div class="pts">${sc}<small> / ${T}</small></div><div class="bar"><i style="width:${Math.min(100,sc/T*100)}%"></i></div></div>`}
   h+='</div>';
   if(S.over){const w=S.over.winner;
-    h+=`<div class="banner over">${w?`Победа ${who(w)}: ${S.score[w]} : ${S.score[opp(w)]}.`:`Ничья, ${S.score.w} : ${S.score.b}.`}</div>`;
+    h+=`<div class="banner over">${w?l.win(w,S.score[w],S.score[opp(w)]):l.draw(S.score.w,S.score.b)}</div>`;
   } else {
-    if(S.finalFor)h+=`<div class="banner">${Who(opp(S.finalFor))} набрали ${T}. ${S.finalFor===t?'Это ваш последний ход.':`У ${who(S.finalFor)} будет последний ход.`}</div>`;
+    if(S.finalFor)h+=`<div class="banner">${l.finalBanner(l.Who(opp(S.finalFor)),T,S.finalFor===t,l.who(S.finalFor))}</div>`;
     let st;
-    if(S.promo)st='Превращение: выберите фигуру из резерва, которая встанет на место пешки.';
-    else if(selRes!==null)st='Выберите клетку на своих начальных горизонталях.';
-    else st=`Ход ${who(t)}, № ${S.moveNo}. `+(me.length?'Можно засчитать комбинации, затем одно действие.':'Одно действие: ход фигурой или фигура из резерва.');
+    if(S.promo)st=l.stPromo;
+    else if(selRes!==null)st=l.stPlace;
+    else st=l.stTurn(t,S.moveNo,me.length>0);
     h+=`<div class="status">${st}</div>`;
   }
   if(S.promo){
-    h+='<section><h2>Обмен с резервом</h2><div class="chips">';
+    h+=`<section><h2>${l.swap}</h2><div class="chips">`;
     S.reserve[t].forEach((o,i)=>{if(o.t!=='P')h+=chip(o,i,t,'promo')});
-    h+=`</div><div class="row" style="margin-top:8px"><button class="btn" data-act="nopromo">${S.promo.fresh?'Оставить пешку':'Отмена'}</button></div></section>`;
+    h+=`</div><div class="row" style="margin-top:8px"><button class="btn" data-act="nopromo">${S.promo.fresh?l.keepPawn:l.cancel}</button></div></section>`;
   }
   if(!S.over&&!S.promo){
-    h+='<section><h2>Засчитать</h2>';
-    if(me.length){h+='<div class="list">';me.forEach((g,i)=>{h+=`<button class="btn prim" data-act="cash" data-g="${i}" data-grp="${i}">${g.label}${g.king?' + король':''} → +${g.pts}</button>`});
-      h+=`</div><p class="note">Засчёт не тратит ход. Фигуры комбинации${mode==='cat'?' и король рядом с ней':''} уходят в резерв.${me.length>1?' Если комбинации делят фигуры, после засчёта одной другая исчезнет.':''}</p>`;}
-    else h+=`<p class="note" style="margin:0">${mode==='cat'?'Собранных узоров из каталога нет.':'Собранных комбинаций нет: нужно 4+ связанные фигуры вне начальных горизонталей.'}</p>`;
-    if(op.length)h+=`<p class="note">У ${who(opp(t))} собрано: ${op.map(g=>`${g.label}${g.king?' + король':''} (+${g.pts})`).join(', ')}. Если не сломать, засчитают следующим ходом.</p>`;
+    h+=`<section><h2>${l.cashIn}</h2>`;
+    if(me.length){h+='<div class="list">';me.forEach((g,i)=>{h+=`<button class="btn prim" data-act="cash" data-g="${i}" data-grp="${i}">${label(g)} → +${g.pts}</button>`});
+      h+=`</div><p class="note">${l.cashNote(mode==='cat',me.length>1)}</p>`;}
+    else h+=`<p class="note" style="margin:0">${mode==='cat'?l.noneCat:l.noneSize}</p>`;
+    if(op.length)h+=`<p class="note">${l.oppHas(opp(t),op.map(g=>`${label(g)} (+${g.pts})`).join(', '))}</p>`;
     h+='</section>';
     if(sel){const p=S.board[sel[0]][sel[1]];
-      if(p.t==='P'&&sel[0]===lastRow(p.c)&&hasPromo(p.c))h+='<div class="row"><button class="btn" data-act="laterpromo">Превратить пешку (действие хода)</button></div>';}
+      if(p&&p.t==='P'&&sel[0]===lastRow(p.c)&&hasPromo(p.c))h+=`<div class="row"><button class="btn" data-act="laterpromo">${l.promoteLater}</button></div>`;}
   }
-  h+='<section class="res"><h2>Резерв</h2>';
+  h+=`<section class="res"><h2>${l.reserve}</h2>`;
   for(const col of[t,opp(t)]){const active=!S.over&&!S.promo&&col===t;
-    h+=`<div><div class="who">${Who(col)}${active&&S.reserve[col].length?' · нажмите фигуру, чтобы выставить':''}</div><div class="chips">`;
-    h+=S.reserve[col].length?S.reserve[col].map((o,i)=>chip(o,i,col,active?'res':null)).join(''):'<span class="empty">пусто</span>';
+    h+=`<div><div class="who">${l.Who(col)}${active&&S.reserve[col].length?l.reserveHint:''}</div><div class="chips">`;
+    h+=S.reserve[col].length?S.reserve[col].map((o,i)=>chip(o,i,col,active?'res':null)).join(''):`<span class="empty">${l.empty}</span>`;
     h+='</div></div>'}
   h+='</section>';
-  h+=`<div class="row"><button class="btn" data-act="undo" ${hist.length?'':'disabled'}>Отменить ход</button>
-    <button class="btn" data-act="new">Новая партия</button><button class="btn" data-act="demo">Пример позиции</button>
-    <button class="btn" data-act="flip">Перевернуть доску</button></div>`;
-  h+=`<section><h2>${mode==='cat'?'Каталог комбинаций':'Шкала очков'}</h2>${catalogHTML()}</section>`;
-  h+='<section><h2>Ход партии</h2><div class="log" id="log">';
-  h+=S.log.length?S.log.map(e=>`<div><span class="n">${e.n?e.n+(e.c==='w'?'.':'…'):''}</span> ${e.x}</div>`).join(''):'<div class="n">Партия только началась.</div>';
+  h+=`<div class="row"><button class="btn" data-act="undo" ${hist.length?'':'disabled'}>${l.undo}</button>
+    <button class="btn" data-act="new">${l.newGame}</button><button class="btn" data-act="demo">${l.demo}</button>
+    <button class="btn" data-act="flip">${l.flip}</button></div>`;
+  h+=`<section><h2>${mode==='cat'?l.catalog:l.scale}</h2>${catalogHTML()}</section>`;
+  h+=`<section><h2>${l.log}</h2><div class="log" id="log">`;
+  h+=S.log.length?S.log.map(e=>`<div><span class="n">${e.n?e.n+(e.c==='w'?'.':'…'):''}</span> ${logText(e)}</div>`).join(''):`<div class="n">${l.logEmpty}</div>`;
   h+='</div></section>';
-  h+=`<details id="rules"><summary>Правила коротко</summary><ul>
-    <li>Ходы как в шахматах. Взятая фигура не снимается, а уходит в резерв владельца. Короля взять нельзя. Шаха и мата нет.</li>
-    <li>${mode==='cat'?'Комбинация — узор из каталога; все его фигуры вне своих начальных горизонталей. Король рядом с узором увеличивает очки.':'Комбинация: 4+ своих фигуры, связанные как ходы короля, все вне своих начальных горизонталей.'}</li>
-    <li>В начале хода можно засчитать любые свои комбинации целиком (бесплатно), затем одно действие: ход фигурой или выставление из резерва.</li>
-    <li>Из резерва фигура ставится на свободную клетку своих двух начальных горизонталей; слон на свой цвет, пешка на вторую горизонталь.</li>
-    <li>Пешка на последней горизонтали обменивается на любую фигуру из резерва.</li>
-    <li>Кто первым набрал ${T}, тот победит, если соперник за последний ход не наберёт больше.</li></ul></details>`;
+  h+=`<details id="rules"><summary>${l.rules}</summary><ul>${l.rulesList(mode==='cat',T).map(x=>`<li>${x}</li>`).join('')}</ul></details>`;
   const open=document.getElementById('rules')?.open;
   document.getElementById('panel').innerHTML=h;
   if(open)document.getElementById('rules').open=true;
@@ -451,10 +580,68 @@ function renderPanel(){
 }
 function render(){renderBoard();renderPanel()}
 
+/* --- перетаскивание (мышь, тач, перо) --- */
+function cellAt(x,y){const el=document.elementFromPoint(x,y);const c=el&&el.closest('[data-act="cell"]');return c?{r:+c.dataset.r,c:+c.dataset.c,el:c}:null}
+function startDrag(e){
+  const b=document.getElementById('board').getBoundingClientRect(),size=b.width/8;
+  if(drag.src==='res'){clearSel();selRes=drag.i;placeT=placeTargets(S.reserve[S.turn][drag.i])}
+  drag.active=true;
+  const g=document.createElement('div');g.className='ghost';
+  g.style.width=g.style.height=size+'px';g.style.fontSize=(size*0.72)+'px';
+  g.innerHTML=`<span class="pc ${drag.col}">${glyph(drag.t)}</span>`;
+  document.body.appendChild(g);drag.ghost=g;document.body.classList.add('dragging');
+  render();moveGhost(e);
+}
+function moveGhost(e){
+  drag.ghost.style.left=e.clientX+'px';drag.ghost.style.top=e.clientY+'px';
+  document.querySelectorAll('.sq.over').forEach(x=>x.classList.remove('over'));
+  const t=cellAt(e.clientX,e.clientY);if(!t)return;
+  const ok=drag.src==='board'?moves.some(m=>m.r===t.r&&m.c===t.c):placeT.some(m=>m.r===t.r&&m.c===t.c);
+  if(ok)t.el.classList.add('over');
+}
+function endDrag(){if(drag&&drag.ghost)drag.ghost.remove();document.body.classList.remove('dragging');drag=null}
+function blockClick(){suppressClick=true;setTimeout(()=>{suppressClick=false},0)}
+
+document.addEventListener('pointerdown',e=>{
+  if(e.pointerType==='mouse'&&e.button!==0)return;
+  if(!S||S.over||S.promo)return;
+  const cell=e.target.closest('[data-act="cell"]');
+  if(cell){
+    e.preventDefault();blockClick();
+    const r=+cell.dataset.r,c=+cell.dataset.c;
+    if(selRes!==null&&placeT.some(x=>x.r===r&&x.c===c)){place(selRes,r,c);return}
+    if(sel){const m=moves.find(x=>x.r===r&&x.c===c);if(m){doMove(sel[0],sel[1],m);return}}
+    const p=S.board[r][c];
+    if(p&&p.c===S.turn){
+      const wasSel=!!(sel&&sel[0]===r&&sel[1]===c);
+      if(!wasSel){clearSel();sel=[r,c];moves=genMoves(r,c);render()}
+      drag={src:'board',r,c,t:p.t,col:p.c,x0:e.clientX,y0:e.clientY,active:false,wasSel};
+    } else {clearSel();render()}
+    return;
+  }
+  const ch=e.target.closest('[data-act="res"]');
+  if(ch){const i=+ch.dataset.i,o=S.reserve[S.turn][i];if(o)drag={src:'res',i,t:o.t,col:S.turn,x0:e.clientX,y0:e.clientY,active:false}}
+});
+document.addEventListener('pointermove',e=>{
+  if(!drag)return;
+  if(!drag.active){if(Math.hypot(e.clientX-drag.x0,e.clientY-drag.y0)<6)return;startDrag(e);return}
+  e.preventDefault();moveGhost(e);
+});
+document.addEventListener('pointerup',e=>{
+  if(!drag)return;const d=drag;
+  if(!d.active){drag=null;if(d.src==='board'&&d.wasSel){clearSel();render()}return}
+  const t=cellAt(e.clientX,e.clientY);endDrag();blockClick();
+  if(t&&d.src==='board'){const m=moves.find(x=>x.r===t.r&&x.c===t.c);if(m){doMove(d.r,d.c,m);return}}
+  if(t&&d.src==='res'&&placeT.some(x=>x.r===t.r&&x.c===t.c)){place(d.i,t.r,t.c);return}
+  render();
+});
+document.addEventListener('pointercancel',()=>{if(drag){const a=drag.active;endDrag();if(a)render()}});
+
 document.addEventListener('click',e=>{
   const el=e.target.closest('[data-act]');if(!el)return;const a=el.dataset.act;
-  if(a==='cell')onCell(+el.dataset.r,+el.dataset.c);
-  else if(a==='cash')cash(+el.dataset.g);
+  if(a==='cell'){if(e.detail===0)onCell(+el.dataset.r,+el.dataset.c);return}  // мышь и тач обрабатываются через pointer-события
+  if(suppressClick&&a==='res')return;
+  if(a==='cash')cash(+el.dataset.g);
   else if(a==='res'){const i=+el.dataset.i;if(selRes===i){clearSel()}else{clearSel();selRes=i;placeT=placeTargets(S.reserve[S.turn][i])}render()}
   else if(a==='promo')promote(+el.dataset.i);
   else if(a==='nopromo')declinePromo();
@@ -463,14 +650,16 @@ document.addEventListener('click',e=>{
   else if(a==='new'){S=initState();hist=[];clearSel();hot=-1;render()}
   else if(a==='demo'){S=demoState();hist=[];clearSel();hot=-1;render()}
   else if(a==='flip'){flipped=!flipped;render()}
+  else if(a==='lang'){if(lang!==el.dataset.l){lang=el.dataset.l;try{localStorage.setItem('cc-lang',lang)}catch(err){}renderStatic();render()}}
   else if(a==='mode'){if(mode!==el.dataset.m){mode=el.dataset.m;hot=-1;
     if(!S.finalFor){for(const col of['w','b'])if(S.score[col]>=target()&&!S.finalFor)S.finalFor=opp(col)}
     render()}}
 });
-document.addEventListener('mouseover',e=>{const el=e.target.closest('[data-grp]');const g=el?+el.dataset.grp:-1;if(g!==hot){hot=g;renderBoard()}});
+document.addEventListener('mouseover',e=>{if(drag)return;const el=e.target.closest('[data-grp]');const g=el?+el.dataset.grp:-1;if(g!==hot){hot=g;renderBoard()}});
 
-S=initState();render();
+S=initState();renderStatic();render();
 </script>
+
 
 </body>
 </html>
