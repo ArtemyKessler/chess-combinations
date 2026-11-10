@@ -60,6 +60,13 @@ header p{margin:0;color:var(--muted)}
 .sq.cap .dot{width:86%;height:86%;background:transparent;border:4px solid var(--sel-soft);box-sizing:border-box}
 .sq:focus-visible{outline:3px solid var(--sel);outline-offset:-3px;z-index:2}
 .sq.own{cursor:grab}
+.shield{position:absolute;right:6%;top:6%;width:26%;height:30%;z-index:2;pointer-events:none;background:var(--sel);
+  clip-path:polygon(50% 0,100% 18%,100% 55%,50% 100%,0 55%,0 18%);box-shadow:0 0 0 2px var(--panel)}
+.sw.s{background:var(--sel);clip-path:polygon(50% 0,100% 18%,100% 55%,50% 100%,0 55%,0 18%);border-radius:0}
+.thinking{display:inline-flex;align-items:center;gap:8px}
+.thinking::before{content:"";width:10px;height:10px;border-radius:50%;background:var(--accent);animation:pulse 1s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.25}}
+@media (prefers-reduced-motion:reduce){.thinking::before{animation:none}}
 .sq.lift .pc{opacity:.25}
 .sq.over{box-shadow:inset 0 0 0 4px var(--sel)}
 body.dragging,body.dragging *{cursor:grabbing!important}
@@ -150,6 +157,7 @@ table.pts-t td{border:1px solid var(--line);padding:3px 8px;text-align:center}
       <span><i class="sw h"></i><span id="lg-home">starting ranks</span></span>
       <span><i class="sw g"></i><span id="lg-me">your combination</span></span>
       <span><i class="sw o"></i><span id="lg-op">opponent's combination</span></span>
+      <span><i class="sw s"></i><span id="lg-guard">defended: can't be knocked</span></span>
     </div>
   </div>
   <div class="panel" id="panel"></div>
@@ -157,7 +165,7 @@ table.pts-t td{border:1px solid var(--line);padding:3px 8px;text-align:center}
 
 <script>
 const FILES='abcdefgh';
-const MODES={cat:{target:25},size:{target:15}};
+const MODES={cat:{target:15},size:{target:15}};
 let mode='cat';
 const target=()=>MODES[mode].target;
 const LET={K:'K',Q:'Q',R:'R',B:'B',N:'N',P:''};
@@ -174,7 +182,9 @@ const sizePts=n=>1+(n-4)*(n-3)/2;
 /* ---------- языки ---------- */
 const I18N={
   en:{
-    title:'Chess Combinations',sub:'Rules prototype v0.2 · two players, one screen',
+    title:'Chess Combinations',sub:'Rules prototype v0.3 · two players or against a bot',
+    opponent:'Opponent',oppNone:'Two players',oppB:'Bot plays Black',oppW:'Bot plays White',botThinking:'Bot is thinking…',
+    lgGuard:"defended: can't be knocked",guardedAria:"defended, can't be knocked",
     board:'Board',lgHome:'starting ranks',lgMe:'your combination',lgOp:"opponent's combination",language:'Language',
     piece:{K:'king',Q:'queen',R:'rook',B:'bishop',N:'knight',P:'pawn'},
     pieceA:{K:'king',Q:'queen',R:'rook',B:'bishop',N:'knight',P:'pawn'},
@@ -204,7 +214,8 @@ const I18N={
     log:'Game log',logEmpty:'The game has just started.',
     rules:'Rules in brief',
     rulesList:(cat,T)=>[
-      'Pieces move as in chess. A captured piece is not removed: it goes to its owner\'s reserve. The king cannot be captured. There is no check or checkmate.',
+      'Pieces move as in chess. A captured piece is not removed: it goes to its owner\'s reserve. There is no check or checkmate.',
+      'A piece defended by one of its own pieces cannot be knocked. The king can never be knocked.',
       cat?'A combination is a pattern from the catalog, with all its pieces outside your starting ranks. A king next to the pattern raises its score.':'A combination is 4+ of your pieces connected like king moves, all outside your starting ranks.',
       'At the start of your turn you may cash in any of your complete combinations for free, then take one action: move a piece or bring one in from your reserve.',
       'A reserve piece goes on any empty square of your two starting ranks; a bishop on its own colour, a pawn on your second rank.',
@@ -218,7 +229,9 @@ const I18N={
     logDemo:'Example position: scores and reserves are illustrative.',
   },
   ru:{
-    title:'Шахматы-комбинации',sub:'Прототип правил v0.2 · игра вдвоём за одним экраном',
+    title:'Шахматы-комбинации',sub:'Прототип правил v0.3 · вдвоём или против бота',
+    opponent:'Соперник',oppNone:'Вдвоём',oppB:'Бот за чёрных',oppW:'Бот за белых',botThinking:'Бот думает…',
+    lgGuard:'защищена: отбросить нельзя',guardedAria:'защищена, отбросить нельзя',
     board:'Доска',lgHome:'начальные горизонтали',lgMe:'ваша комбинация',lgOp:'комбинация соперника',language:'Язык',
     piece:{K:'король',Q:'ферзь',R:'ладья',B:'слон',N:'конь',P:'пешка'},
     pieceA:{K:'короля',Q:'ферзя',R:'ладью',B:'слона',N:'коня',P:'пешку'},
@@ -248,7 +261,8 @@ const I18N={
     log:'Ход партии',logEmpty:'Партия только началась.',
     rules:'Правила коротко',
     rulesList:(cat,T)=>[
-      'Ходы как в шахматах. Взятая фигура не снимается, а уходит в резерв владельца. Короля взять нельзя. Шаха и мата нет.',
+      'Ходы как в шахматах. Взятая фигура не снимается, а уходит в резерв владельца. Шаха и мата нет.',
+      'Фигуру, которую защищает своя фигура, отбросить нельзя. Короля отбросить нельзя никогда.',
       cat?'Комбинация — узор из каталога; все его фигуры вне своих начальных горизонталей. Король рядом с узором увеличивает очки.':'Комбинация: 4+ своих фигуры, связанные как ходы короля, все вне своих начальных горизонталей.',
       'В начале хода можно засчитать любые свои комбинации целиком (бесплатно), затем одно действие: ход фигурой или выставление из резерва.',
       'Из резерва фигура ставится на свободную клетку своих двух начальных горизонталей; слон на свой цвет, пешка на вторую горизонталь.',
@@ -269,16 +283,16 @@ const L=()=>I18N[lang];
 /* Каталог. Строки: первая — дальше от своей стороны. '.' — не важно, 'o' — клетка пуста, '*' — любая своя фигура, кроме короля.
    Узоры можно поворачивать и отражать. pts / ptsK — очки без короля и с королём рядом. */
 const CATALOG=[
-  {id:'zastava',name:{en:'Outpost',ru:'Застава'},rows:['.N.','P.P'],pts:2,ptsK:4},
-  {id:'falanga',name:{en:'Phalanx',ru:'Фаланга'},rows:['PPPP'],pts:4,ptsK:6},
-  {id:'pushka',name:{en:"Alekhine's Gun",ru:'Пушка Алехина'},rows:['R','R','Q'],pts:4,ptsK:7},
-  {id:'bastion',name:{en:'Bastion',ru:'Бастион'},rows:['.N.','PRP'],pts:6,ptsK:9},
-  {id:'parad',name:{en:'Parade',ru:'Парад'},rows:['RNBQ'],pts:6,ptsK:9},
-  {id:'brigada',name:{en:'Light Brigade',ru:'Лёгкая бригада'},rows:['NN','BB'],pts:7,ptsK:11},
-  {id:'stena',name:{en:'Wall',ru:'Стена'},rows:['PPPPPP'],pts:8,ptsK:12},
-  {id:'tsep',name:{en:'Chain',ru:'Цепь'},rows:['...P','..P.','.P..','P...'],pts:8,ptsK:12},
-  {id:'polk',name:{en:'Regiment',ru:'Полк'},rows:['NN','BB','RR'],pts:17,ptsK:23},
-  {id:'kare',name:{en:'Square',ru:'Каре'},rows:['***','*o*','***'],pts:18,ptsK:24},
+  {id:'zastava',name:{en:'Outpost',ru:'Застава'},rows:['.N.','P.P'],pts:1,ptsK:3},
+  {id:'falanga',name:{en:'Phalanx',ru:'Фаланга'},rows:['PPPP'],pts:3,ptsK:6},
+  {id:'pushka',name:{en:"Alekhine's Gun",ru:'Пушка Алехина'},rows:['R','R','Q'],pts:3,ptsK:5},
+  {id:'bastion',name:{en:'Bastion',ru:'Бастион'},rows:['.N.','PRP'],pts:4,ptsK:6},
+  {id:'parad',name:{en:'Parade',ru:'Парад'},rows:['RNBQ'],pts:4,ptsK:6},
+  {id:'brigada',name:{en:'Light Brigade',ru:'Лёгкая бригада'},rows:['NN','BB'],pts:5,ptsK:8},
+  {id:'stena',name:{en:'Wall',ru:'Стена'},rows:['PPPPPP'],pts:7,ptsK:10},
+  {id:'tsep',name:{en:'Chain',ru:'Цепь'},rows:['...P','..P.','.P..','P...'],pts:5,ptsK:8},
+  {id:'polk',name:{en:'Regiment',ru:'Полк'},rows:['NN','BB','RR'],pts:11,ptsK:14},
+  {id:'kare',name:{en:'Square',ru:'Каре'},rows:['***','*o*','***'],pts:12,ptsK:16},
 ];
 const CAT_BY_ID=Object.fromEntries(CATALOG.map(p=>[p.id,p]));
 function variants(rows){
@@ -320,7 +334,8 @@ function demoState(){
   return s;
 }
 function snap(){hist.push(JSON.stringify(S));if(hist.length>300)hist.shift()}
-function undo(){if(!hist.length)return;S=JSON.parse(hist.pop());clearSel();hot=-1;render()}
+function undo(){if(!hist.length)return;if(botTimer){clearTimeout(botTimer);botTimer=null}
+  S=JSON.parse(hist.pop());while(botSide&&S.turn===botSide&&hist.length)S=JSON.parse(hist.pop());clearSel();hot=-1;render()}
 function clearSel(){sel=null;moves=[];selRes=null;placeT=[]}
 function log(e){e.n=S.moveNo;e.c=S.turn;S.log.push(e)}
 function logText(e){const l=L();
@@ -336,11 +351,25 @@ function logText(e){const l=L();
   return e.x||'';
 }
 
-function genMoves(r,c){
-  const B=S.board,p=B[r][c],res=[];
+/* Правило защиты: фигуру, которую защищает своя фигура, отбросить нельзя. Короля отбросить нельзя никогда. */
+const GUARD=true;
+function attacked(St,r,c,col){
+  const B=St.board,d=col==='w'?1:-1;
+  for(const dc of[-1,1]){const x=r+d,y=c+dc;if(inB(x,y)){const q=B[x][y];if(q&&q.c===col&&q.t==='P')return true}}
+  for(const[a,b]of[[1,2],[2,1],[-1,2],[-2,1],[1,-2],[2,-1],[-1,-2],[-2,-1]]){const x=r+a,y=c+b;if(inB(x,y)){const q=B[x][y];if(q&&q.c===col&&q.t==='N')return true}}
+  for(let a=-1;a<=1;a++)for(let b=-1;b<=1;b++){if(!a&&!b)continue;const x=r+a,y=c+b;if(inB(x,y)){const q=B[x][y];if(q&&q.c===col&&q.t==='K')return true}}
+  for(const[a,b]of[[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]]){let x=r+a,y=c+b;const dg=a&&b;
+    while(inB(x,y)){const q=B[x][y];if(q){if(q.c===col&&(q.t==='Q'||(dg?q.t==='B':q.t==='R')))return true;break}x+=a;y+=b}}
+  return false;
+}
+const guarded=(St,r,c)=>{const t=St.board[r][c];return !!t&&t.t!=='K'&&GUARD&&attacked(St,r,c,t.c)};
+const canKnock=(St,r,c)=>{const t=St.board[r][c];return t.t!=='K'&&!(GUARD&&attacked(St,r,c,t.c))};
+/* reach=true: все клетки, куда фигура достаёт, включая защищённые вражеские (для подсказок и оценки бота) */
+function genMoves(r,c,St=S,reach=false){
+  const B=St.board,p=B[r][c],res=[];
   const land=(tr,tc)=>{if(!inB(tr,tc))return false;const t=B[tr][tc];
     if(!t){res.push({r:tr,c:tc});return true}
-    if(t.c!==p.c&&t.t!=='K')res.push({r:tr,c:tc,cap:true});return false};
+    if(t.c!==p.c&&(reach||canKnock(St,tr,tc)))res.push({r:tr,c:tc,cap:true});return false};
   const slide=ds=>ds.forEach(([dr,dc])=>{let tr=r+dr,tc=c+dc;while(land(tr,tc)){tr+=dr;tc+=dc}});
   const step=ds=>ds.forEach(([dr,dc])=>land(r+dr,c+dc));
   const O=[[1,0],[-1,0],[0,1],[0,-1]],D=[[1,1],[1,-1],[-1,1],[-1,-1]];
@@ -357,13 +386,13 @@ function genMoves(r,c){
       if(inB(r+d,c)&&!B[r+d][c]){res.push({r:r+d,c});
         if(r===pawnRow(p.c)&&!B[r+2*d][c])res.push({r:r+2*d,c,dbl:true})}
       for(const dc of[-1,1]){const tr=r+d,tc=c+dc;if(!inB(tr,tc))continue;const t=B[tr][tc];
-        if(t&&t.c!==p.c&&t.t!=='K')res.push({r:tr,c:tc,cap:true});
-        if(!t&&S.ep&&S.ep.r===tr&&S.ep.c===tc){const v=B[r][tc];if(v&&v.t==='P'&&v.c!==p.c)res.push({r:tr,c:tc,ep:{r,c:tc}})}}
+        if(t&&t.c!==p.c&&(reach||canKnock(St,tr,tc)))res.push({r:tr,c:tc,cap:true});
+        if(!t&&St.ep&&St.ep.r===tr&&St.ep.c===tc){const v=B[r][tc];if(v&&v.t==='P'&&v.c!==p.c&&(reach||canKnock(St,r,tc)))res.push({r:tr,c:tc,ep:{r,c:tc}})}}
       break}
   }
   return res;
 }
-function toReserve(t){const o={t:t.t,c:t.c};if(t.t==='B')o.lt=t.lt;S.reserve[t.c].push(o)}
+function toReserve(t,St=S){const o={t:t.t,c:t.c};if(t.t==='B')o.lt=t.lt;St.reserve[t.c].push(o)}
 const hasPromo=col=>S.reserve[col].some(x=>x.t!=='P');
 
 function doMove(fr,fc,m){
@@ -382,9 +411,9 @@ function place(i,r,c){
   const p={t:o.t,c:col,moved:o.t!=='P'};if(o.t==='B')p.lt=o.lt;
   S.board[r][c]=p;S.ep=null;S.last=[[r,c]];log({k:'place',t:o.t,sq:sq(r,c)});endTurn();
 }
-function placeTargets(o){
-  const col=S.turn,rows=o.t==='P'?[pawnRow(col)]:(col==='w'?[6,7]:[0,1]),out=[];
-  for(const r of rows)for(let c=0;c<8;c++){if(S.board[r][c])continue;if(o.t==='B'&&((r+c)%2===0)!==o.lt)continue;out.push({r,c})}
+function placeTargets(o,St=S){
+  const col=St.turn,rows=o.t==='P'?[pawnRow(col)]:(col==='w'?[6,7]:[0,1]),out=[];
+  for(const r of rows)for(let c=0;c<8;c++){if(St.board[r][c])continue;if(o.t==='B'&&((r+c)%2===0)!==o.lt)continue;out.push({r,c})}
   return out;
 }
 function promote(i){
@@ -397,8 +426,8 @@ function promote(i){
 function declinePromo(){const f=S.promo.fresh;S.promo=null;if(f){log({k:'keep'});endTurn()}else render()}
 
 /* --- комбинации --- */
-function sizeCombos(col){
-  const B=S.board,seen=new Set(),out=[];
+function sizeCombos(col,St=S){
+  const B=St.board,seen=new Set(),out=[];
   for(let r=0;r<8;r++)for(let c=0;c<8;c++){
     const p=B[r][c];if(!p||p.c!==col||isHome(col,r)||seen.has(r*8+c))continue;
     const cells=[],st=[[r,c]];seen.add(r*8+c);
@@ -409,8 +438,8 @@ function sizeCombos(col){
   }
   return out.sort((a,b)=>b.pts-a.pts);
 }
-function catCombos(col){
-  const B=S.board,found=new Map();
+function catCombos(col,St=S){
+  const B=St.board,found=new Map();
   for(const p of CATALOG)for(const v of p.vars){
     const h=Math.max(...v.map(x=>x[0]))+1,w=Math.max(...v.map(x=>x[1]))+1;
     for(let r0=0;r0+h<=8;r0++)for(let c0=0;c0+w<=8;c0++){
@@ -434,7 +463,7 @@ function catCombos(col){
   const res=list.filter(a=>!list.some(b=>b!==a&&b.set.size>a.set.size&&[...a.set].every(k=>b.set.has(k))));
   return res.sort((a,b)=>b.pts-a.pts);
 }
-const combosFor=col=>mode==='cat'?catCombos(col):sizeCombos(col);
+const combosFor=(col,St=S)=>mode==='cat'?catCombos(col,St):sizeCombos(col,St);
 const comboName=g=>g.pid?CAT_BY_ID[g.pid].name[lang]:L().sizeLabel(g.size);
 
 function cash(gi){
@@ -454,13 +483,157 @@ function endTurn(){
 
 /* Клик или клавиатура по клетке. */
 function onCell(r,c){
-  if(S.over||S.promo)return;
+  if(S.over||S.promo||humanLocked())return;
   if(selRes!==null){const t=placeT.find(x=>x.r===r&&x.c===c);if(t){place(selRes,r,c);return}clearSel();}
   if(sel){const m=moves.find(x=>x.r===r&&x.c===c);if(m){doMove(sel[0],sel[1],m);return}}
   const p=S.board[r][c];
   if(p&&p.c===S.turn&&!(sel&&sel[0]===r&&sel[1]===c)){sel=[r,c];moves=genMoves(r,c)}else clearSel();
   render();
 }
+
+/* ---------- бот ---------- */
+/* Смотрит на один ход вперёд. Оценка позиции: очки, собранные комбинации (с учётом риска, что их сломают),
+   комбинации соперника, которые он засчитает следующим ходом, и сколько ходов осталось до лучших узоров. */
+let botSide=null,botBusy=false,botTimer=null;
+const BOT_W={risk:.25,safe:.85,oppNext:1,pot:.8,potO:.6,res:.05,danger:30,gamma:.7,noise:.3};
+const UPGRADE={zastava:'bastion',falanga:'stena',brigada:'polk'};
+CATALOG.forEach(p=>{p.places=[];for(const v of p.vars){const h=Math.max(...v.map(x=>x[0]))+1,w=Math.max(...v.map(x=>x[1]))+1;
+  for(let r0=0;r0+h<=8;r0++)for(let c0=0;c0+w<=8;c0++)p.places.push(v.map(([a,b,ch])=>[r0+a,c0+b,ch]))}});
+const DIST=(()=>{const D={};
+  const steps=(t,r,c)=>{const out=[],add=(a,b)=>{if(inB(a,b))out.push(a*8+b)};
+    const O=[[1,0],[-1,0],[0,1],[0,-1]],G=[[1,1],[1,-1],[-1,1],[-1,-1]];
+    const slide=ds=>ds.forEach(([dr,dc])=>{for(let k=1;k<8;k++)add(r+dr*k,c+dc*k)});
+    if(t==='R')slide(O);else if(t==='B')slide(G);else if(t==='Q')slide(O.concat(G));
+    else if(t==='N')[[1,2],[2,1],[-1,2],[-2,1],[1,-2],[2,-1],[-1,-2],[-2,-1]].forEach(([a,b])=>add(r+a,c+b));
+    return out};
+  for(const t of'RBQN'){D[t]=[];for(let s=0;s<64;s++){const d=new Uint8Array(64).fill(99);d[s]=0;const q=[s];
+    while(q.length){const x=q.shift();for(const y of steps(t,(x/8)|0,x%8))if(d[y]===99){d[y]=d[x]+1;q.push(y)}}D[t][s]=d}}
+  return D})();
+function pDist(t,col,r,c,tr,tc){
+  if(t==='P'){if(tc!==c)return 99;const f=col==='w'?r-tr:tr-r;if(f<0)return 99;return f>=2&&r===pawnRow(col)?f-1:f}
+  return DIST[t][r*8+c][tr*8+tc];
+}
+function rDist(o,col,tr,tc){
+  if(o.t==='P')return 1+pDist('P',col,pawnRow(col),tc,tr,tc);
+  let b=99;for(const r of col==='w'?[6,7]:[0,1])for(let c=0;c<8;c++){if(o.t==='B'&&((r+c)%2===0)!==o.lt)continue;const d=DIST[o.t][r*8+c][tr*8+tc];if(d<b)b=d}
+  return 1+b;
+}
+function planCosts(St,col){
+  const B=St.board,pcs=[];
+  for(let r=0;r<8;r++)for(let c=0;c<8;c++){const p=B[r][c];if(p&&p.c===col&&p.t!=='K')pcs.push({t:p.t,r,c,lt:p.lt,res:false})}
+  St.reserve[col].forEach(o=>pcs.push({t:o.t,lt:o.lt,res:true,o}));
+  return CATALOG.map(p=>{let best=99;
+    for(const pl of p.places){let cost=0,ok=true;const used=new Uint8Array(pcs.length);
+      for(const[r,c,ch]of pl){
+        if(isHome(col,r)){ok=false;break}
+        const q=B[r][c];
+        if(ch==='o'){if(q)cost+=q.c===col?1:2;continue}
+        if(q&&q.c!==col)cost+=q.t==='K'?6:(GUARD&&attacked(St,r,c,q.c)?3:2);
+        else if(q&&q.c===col&&(ch==='*'?q.t!=='K':q.t===ch)){const k=pcs.findIndex((x,i)=>!used[i]&&!x.res&&x.r===r&&x.c===c);if(k>=0){used[k]=1;continue}}
+        else if(q&&q.c===col)cost+=1;
+        let bd=99,bi=-1;
+        for(let i=0;i<pcs.length;i++){if(used[i])continue;const x=pcs[i];
+          if(ch!=='*'&&x.t!==ch)continue;if(x.t==='B'&&((r+c)%2===0)!==x.lt)continue;
+          const d=x.res?rDist(x.o,col,r,c):pDist(x.t,col,x.r,x.c,r,c);if(d<bd){bd=d;bi=i}}
+        if(bi<0||bd>=99){ok=false;break}
+        used[bi]=1;cost+=bd;if(cost>=best){ok=false;break}}
+      if(ok&&cost<best)best=cost}
+    return best});
+}
+function planValue(costs){const v=CATALOG.map((p,i)=>costs[i]>=99?0:p.pts*Math.pow(BOT_W.gamma,costs[i])).sort((a,b)=>b-a);return v[0]+.5*(v[1]||0)}
+function reachMap(St,col){const A=new Uint8Array(64),B=St.board;
+  for(let r=0;r<8;r++)for(let c=0;c<8;c++){const p=B[r][c];if(!p||p.c!==col)continue;
+    if(p.t==='P'){const d=col==='w'?-1:1;for(const dc of[-1,1])if(inB(r+d,c+dc))A[(r+d)*8+c+dc]=1;continue}
+    for(const m of genMoves(r,c,St,true))if(!m.castle)A[m.r*8+m.c]=1}
+  return A}
+const atRisk=(St,g,reach)=>g.cells.some(([r,c])=>reach[r*8+c]&&canKnock(St,r,c));
+function disjoint(list){const used=new Set(),out=[];for(const g of list){const cells=g.king?g.cells.concat([g.king]):g.cells;
+  if(cells.some(([r,c])=>used.has(r*8+c)))continue;cells.forEach(([r,c])=>used.add(r*8+c));out.push(g)}return out}
+function cloneS(St){return{board:St.board.map(r=>r.slice()),reserve:{w:St.reserve.w.slice(),b:St.reserve.b.slice()},score:{...St.score},turn:St.turn,ep:St.ep,finalFor:St.finalFor,over:St.over}}
+const kindOf=x=>x.t+(x.t==='B'?(x.lt?'l':'d'):'');
+function botActions(St){
+  const col=St.turn,out=[],kinds=[...new Set(St.reserve[col].filter(x=>x.t!=='P').map(kindOf))];
+  for(let r=0;r<8;r++)for(let c=0;c<8;c++){const p=St.board[r][c];if(!p||p.c!==col)continue;
+    for(const m of genMoves(r,c,St)){const a=Object.assign({type:'move',fr:r,fc:c},m);out.push(a);
+      if(p.t==='P'&&m.r===lastRow(col))kinds.forEach(k=>out.push(Object.assign({},a,{promo:k})))}
+    if(p.t==='P'&&r===lastRow(col))kinds.forEach(k=>out.push({type:'latepromo',r,c,promo:k}))}
+  const seen=new Set();
+  St.reserve[col].forEach((o,i)=>{const k=kindOf(o);if(seen.has(k))return;seen.add(k);
+    for(const t of placeTargets(o,St))out.push({type:'place',i,r:t.r,c:t.c})});
+  return out;
+}
+function botSwap(St,r,c,kind){const col=St.turn,i=St.reserve[col].findIndex(x=>kindOf(x)===kind);const o=St.reserve[col].splice(i,1)[0];
+  toReserve(St.board[r][c],St);const p={t:o.t,c:col,moved:true};if(o.t==='B')p.lt=(r+c)%2===0;St.board[r][c]=p}
+function botApply(St,a){
+  const B=St.board,col=St.turn;
+  if(a.type==='move'){const p=Object.assign({},B[a.fr][a.fc]);
+    if(a.cap)toReserve(B[a.r][a.c],St);
+    if(a.ep){toReserve(B[a.ep.r][a.ep.c],St);B[a.ep.r][a.ep.c]=null}
+    B[a.r][a.c]=p;B[a.fr][a.fc]=null;p.moved=true;
+    if(a.castle){const rk=Object.assign({},B[a.fr][a.castle.from]);B[a.fr][a.castle.to]=rk;B[a.fr][a.castle.from]=null;rk.moved=true}
+    St.ep=a.dbl?{r:(a.fr+a.r)/2,c:a.fc}:null;
+    if(a.promo)botSwap(St,a.r,a.c,a.promo)}
+  else if(a.type==='place'){const o=St.reserve[col].splice(a.i,1)[0];const p={t:o.t,c:col,moved:o.t!=='P'};if(o.t==='B')p.lt=o.lt;B[a.r][a.c]=p;St.ep=null}
+  else if(a.type==='latepromo'){botSwap(St,a.r,a.c,a.promo);St.ep=null}
+}
+function botEval(St,me,oppPlan,recalcOpp){
+  const op=opp(me),T=target();
+  const mine=disjoint(combosFor(me,St)),theirs=disjoint(combosFor(op,St)),reach=reachMap(St,op);
+  let myC=0;for(const g of mine)myC+=g.pts*(atRisk(St,g,reach)?BOT_W.risk:BOT_W.safe);
+  const oppNext=theirs.reduce((s,g)=>s+g.pts,0);
+  const po=recalcOpp?planValue(planCosts(St,op)):oppPlan;
+  let v=(St.score[me]-St.score[op])+myC-BOT_W.oppNext*oppNext+BOT_W.pot*planValue(planCosts(St,me))-BOT_W.potO*po
+    -BOT_W.res*(St.reserve[me].length-St.reserve[op].length);
+  if(St.score[op]+oppNext>=T&&!St.finalFor)v-=BOT_W.danger;
+  if(St.finalFor===me){const a=St.score[me],b=St.score[op];v+=a>b?1e5:a<b?-1e5:0}
+  return v;
+}
+function kingNear(St,me,g){let kr=-1,kc=-1;
+  for(let r=0;r<8;r++)for(let c=0;c<8;c++){const p=St.board[r][c];if(p&&p.c===me&&p.t==='K'){kr=r;kc=c}}
+  if(kr<0)return false;
+  for(const[r,c]of g.cells)for(let dr=-1;dr<=1;dr++)for(let dc=-1;dc<=1;dc++){const x=r+dr,y=c+dc;
+    if(!inB(x,y)||g.set.has(x*8+y)||St.board[x][y]||isHome(me,x))continue;if(Math.max(Math.abs(x-kr),Math.abs(y-kc))===1)return true}
+  return false}
+function upgradeReady(St,me,g){const up=CATALOG.find(p=>p.id===UPGRADE[g.pid]);if(!up)return false;
+  for(const pl of up.places){const sqs=pl.map(([r,c])=>r*8+c);if(![...g.set].every(k=>sqs.includes(k)))continue;
+    let miss=0,bad=false;for(const[r,c,ch]of pl){if(isHome(me,r)){bad=true;break}const q=St.board[r][c];
+      if(q&&q.c!==me){bad=true;break}if(!q||(ch!=='*'&&q.t!==ch))miss++}
+    if(!bad&&miss===1)return true}
+  return false}
+/* Какую комбинацию засчитать сейчас: под угрозой, добирает до порога, или нет смысла ждать. Иначе -1. */
+function botCashIndex(){
+  const me=S.turn,list=combosFor(me);if(!list.length)return -1;
+  const reach=reachMap(S,opp(me));
+  for(let i=0;i<list.length;i++){const g=list[i];
+    if(S.score[me]+g.pts>=target()||atRisk(S,g,reach))return i;
+    if(g.pid&&UPGRADE[g.pid]&&upgradeReady(S,me,g))continue;
+    if(g.pid&&!g.king&&kingNear(S,me,g))continue;
+    return i}
+  return -1}
+function botChoose(){
+  const me=S.turn,acts=botActions(S);if(!acts.length)return null;
+  const base=cloneS(S),oppPlan=planValue(planCosts(base,opp(me)));let best=null,bv=-Infinity;
+  for(const a of acts){const T=cloneS(base);botApply(T,a);
+    const v=botEval(T,me,oppPlan,!!(a.cap||a.ep))+(Math.random()-.5)*BOT_W.noise;if(v>bv){bv=v;best=a}}
+  return best}
+function botTurn(){
+  botTimer=null;if(!botSide||S.over||S.turn!==botSide)return;
+  botBusy=true;
+  for(let guard=0;guard<6&&!S.finalFor;guard++){const i=botCashIndex();if(i<0)break;cash(i)}
+  const a=botChoose();
+  if(!a){botBusy=false;endTurn();return}
+  if(a.type==='move'){
+    const m=genMoves(a.fr,a.fc).find(x=>x.r===a.r&&x.c===a.c&&!!x.castle===!!a.castle);
+    doMove(a.fr,a.fc,m);
+    if(S.promo){const i=a.promo?S.reserve[S.turn].findIndex(x=>kindOf(x)===a.promo):-1;botBusy=false;if(i>=0)promote(i);else declinePromo();return}
+  } else if(a.type==='place')place(a.i,a.r,a.c);
+  else if(a.type==='latepromo'){snap();S.promo={r:a.r,c:a.c,fresh:true};const i=S.reserve[S.turn].findIndex(x=>kindOf(x)===a.promo);botBusy=false;promote(i);return}
+  botBusy=false;render();
+}
+function scheduleBot(){
+  if(botSide&&!S.over&&S.turn===botSide&&!S.promo&&!botTimer&&!botBusy)botTimer=setTimeout(botTurn,420);
+}
+const humanLocked=()=>!!(botSide&&S.turn===botSide);
 
 /* --- отрисовка --- */
 function renderStatic(){
@@ -472,6 +645,7 @@ function renderStatic(){
   document.getElementById('lg-home').textContent=l.lgHome;
   document.getElementById('lg-me').textContent=l.lgMe;
   document.getElementById('lg-op').textContent=l.lgOp;
+  document.getElementById('lg-guard').textContent=l.lgGuard;
   const seg=document.getElementById('lang-seg');seg.setAttribute('aria-label',l.language);
   seg.querySelectorAll('button').forEach(b=>{const on=b.dataset.l===lang;b.classList.toggle('on',on);b.setAttribute('aria-pressed',on)});
 }
@@ -481,7 +655,9 @@ function renderBoard(){
   me.forEach((g,i)=>(g.king?g.cells.concat([g.king]):g.cells).forEach(([r,c])=>{const k=r*8+c;if(!mine.has(k)||i===hot)mine.set(k,i)}));
   op.forEach(g=>(g.king?g.cells.concat([g.king]):g.cells).forEach(([r,c])=>theirs.add(r*8+c)));
   const last=new Set((S.last||[]).map(([r,c])=>r*8+c));
-  const canAct=!S.over&&!S.promo;
+  const canAct=!S.over&&!S.promo&&!humanLocked();
+  const shield=new Set();
+  if(sel){for(const m of genMoves(sel[0],sel[1],S,true))if(m.cap&&!moves.some(x=>x.r===m.r&&x.c===m.c))shield.add(m.r*8+m.c)}
   let h='';
   for(let i=0;i<8;i++)for(let j=0;j<8;j++){
     const r=flipped?7-i:i,c=flipped?7-j:j,p=B[r][c],k=r*8+c;
@@ -495,9 +671,10 @@ function renderBoard(){
     if(drag&&drag.active&&drag.src==='board'&&drag.r===r&&drag.c===c)cls.push('lift');
     const mv=moves.find(x=>x.r===r&&x.c===c)||placeT.find(x=>x.r===r&&x.c===c);
     if(mv&&(mv.cap||mv.ep))cls.push('cap');
-    const lab=sq(r,c)+(p?`, ${l.colorAdj(p.c)} ${l.piece[p.t]}`:'');
+    const sh=shield.has(k);
+    const lab=sq(r,c)+(p?`, ${l.colorAdj(p.c)} ${l.piece[p.t]}`:'')+(sh?`, ${l.guardedAria}`:'');
     h+=`<button class="${cls.join(' ')}" data-act="cell" data-r="${r}" data-c="${c}" aria-label="${lab}">`
-      +(p?`<span class="pc ${p.c}">${glyph(p.t)}</span>`:'')+(mv?'<span class="dot"></span>':'')
+      +(p?`<span class="pc ${p.c}">${glyph(p.t)}</span>`:'')+(mv?'<span class="dot"></span>':'')+(sh?'<span class="shield" aria-hidden="true"></span>':'')
       +(i===7?`<span class="crd f">${FILES[c]}</span>`:'')+(j===0?`<span class="crd r">${8-r}</span>`:'')+'</button>';
   }
   document.getElementById('board').innerHTML=h;
@@ -529,6 +706,8 @@ function renderPanel(){
   const label=g=>comboName(g)+(g.king?l.plusKing:'');
   let h=`<div class="row" style="align-items:center;gap:10px"><span class="note" style="margin:0">${l.scoring}</span><div class="seg" role="group" aria-label="${l.scoringMode}">`
     +[['cat',l.modeCat],['size',l.modeSize]].map(([k,lab])=>`<button data-act="mode" data-m="${k}" class="${mode===k?'on':''}" aria-pressed="${mode===k}">${lab}</button>`).join('')+'</div></div>';
+  h+=`<div class="row" style="align-items:center;gap:10px"><span class="note" style="margin:0">${l.opponent}</span><div class="seg" role="group" aria-label="${l.opponent}">`
+    +[['none',l.oppNone],['b',l.oppB],['w',l.oppW]].map(([k,lab])=>{const on=(botSide||'none')===k;return `<button data-act="opp" data-o="${k}" class="${on?'on':''}" aria-pressed="${on}">${lab}</button>`}).join('')+'</div></div>';
   h+='<div class="scores">';
   for(const col of['w','b']){const sc=S.score[col];
     h+=`<div class="sc ${!S.over&&t===col?'on':''}"><div class="nm">${l.Who(col)}<small>${!S.over&&t===col?l.toMove:''}</small></div>
@@ -542,14 +721,15 @@ function renderPanel(){
     if(S.promo)st=l.stPromo;
     else if(selRes!==null)st=l.stPlace;
     else st=l.stTurn(t,S.moveNo,me.length>0);
-    h+=`<div class="status">${st}</div>`;
+    if(humanLocked())st=`<span class="thinking">${l.botThinking}</span>`;
+    h+=`<div class="status" aria-live="polite">${st}</div>`;
   }
-  if(S.promo){
+  if(S.promo&&!humanLocked()){
     h+=`<section><h2>${l.swap}</h2><div class="chips">`;
     S.reserve[t].forEach((o,i)=>{if(o.t!=='P')h+=chip(o,i,t,'promo')});
     h+=`</div><div class="row" style="margin-top:8px"><button class="btn" data-act="nopromo">${S.promo.fresh?l.keepPawn:l.cancel}</button></div></section>`;
   }
-  if(!S.over&&!S.promo){
+  if(!S.over&&!S.promo&&!humanLocked()){
     h+=`<section><h2>${l.cashIn}</h2>`;
     if(me.length){h+='<div class="list">';me.forEach((g,i)=>{h+=`<button class="btn prim" data-act="cash" data-g="${i}" data-grp="${i}">${label(g)} → +${g.pts}</button>`});
       h+=`</div><p class="note">${l.cashNote(mode==='cat',me.length>1)}</p>`;}
@@ -560,7 +740,7 @@ function renderPanel(){
       if(p&&p.t==='P'&&sel[0]===lastRow(p.c)&&hasPromo(p.c))h+=`<div class="row"><button class="btn" data-act="laterpromo">${l.promoteLater}</button></div>`;}
   }
   h+=`<section class="res"><h2>${l.reserve}</h2>`;
-  for(const col of[t,opp(t)]){const active=!S.over&&!S.promo&&col===t;
+  for(const col of[t,opp(t)]){const active=!S.over&&!S.promo&&col===t&&!humanLocked();
     h+=`<div><div class="who">${l.Who(col)}${active&&S.reserve[col].length?l.reserveHint:''}</div><div class="chips">`;
     h+=S.reserve[col].length?S.reserve[col].map((o,i)=>chip(o,i,col,active?'res':null)).join(''):`<span class="empty">${l.empty}</span>`;
     h+='</div></div>'}
@@ -578,7 +758,7 @@ function renderPanel(){
   if(open)document.getElementById('rules').open=true;
   const lg=document.getElementById('log');if(lg)lg.scrollTop=lg.scrollHeight;
 }
-function render(){renderBoard();renderPanel()}
+function render(){renderBoard();renderPanel();scheduleBot()}
 
 /* --- перетаскивание (мышь, тач, перо) --- */
 function cellAt(x,y){const el=document.elementFromPoint(x,y);const c=el&&el.closest('[data-act="cell"]');return c?{r:+c.dataset.r,c:+c.dataset.c,el:c}:null}
@@ -604,7 +784,7 @@ function blockClick(){suppressClick=true;setTimeout(()=>{suppressClick=false},0)
 
 document.addEventListener('pointerdown',e=>{
   if(e.pointerType==='mouse'&&e.button!==0)return;
-  if(!S||S.over||S.promo)return;
+  if(!S||S.over||S.promo||humanLocked()||botBusy)return;
   const cell=e.target.closest('[data-act="cell"]');
   if(cell){
     e.preventDefault();blockClick();
@@ -641,14 +821,16 @@ document.addEventListener('click',e=>{
   const el=e.target.closest('[data-act]');if(!el)return;const a=el.dataset.act;
   if(a==='cell'){if(e.detail===0)onCell(+el.dataset.r,+el.dataset.c);return}  // мышь и тач обрабатываются через pointer-события
   if(suppressClick&&a==='res')return;
+  if(humanLocked()&&['cash','res','promo','nopromo','laterpromo'].includes(a))return;
   if(a==='cash')cash(+el.dataset.g);
   else if(a==='res'){const i=+el.dataset.i;if(selRes===i){clearSel()}else{clearSel();selRes=i;placeT=placeTargets(S.reserve[S.turn][i])}render()}
   else if(a==='promo')promote(+el.dataset.i);
   else if(a==='nopromo')declinePromo();
   else if(a==='laterpromo'){S.promo={r:sel[0],c:sel[1],fresh:false};clearSel();render()}
   else if(a==='undo')undo();
-  else if(a==='new'){S=initState();hist=[];clearSel();hot=-1;render()}
-  else if(a==='demo'){S=demoState();hist=[];clearSel();hot=-1;render()}
+  else if(a==='new'){if(botTimer){clearTimeout(botTimer);botTimer=null}S=initState();hist=[];clearSel();hot=-1;render()}
+  else if(a==='opp'){const v=el.dataset.o==='none'?null:el.dataset.o;if(v!==botSide){botSide=v;if(botTimer){clearTimeout(botTimer);botTimer=null}clearSel();if(botSide)flipped=botSide==='w';render()}}
+  else if(a==='demo'){if(botTimer){clearTimeout(botTimer);botTimer=null}S=demoState();hist=[];clearSel();hot=-1;render()}
   else if(a==='flip'){flipped=!flipped;render()}
   else if(a==='lang'){if(lang!==el.dataset.l){lang=el.dataset.l;try{localStorage.setItem('cc-lang',lang)}catch(err){}renderStatic();render()}}
   else if(a==='mode'){if(mode!==el.dataset.m){mode=el.dataset.m;hot=-1;
