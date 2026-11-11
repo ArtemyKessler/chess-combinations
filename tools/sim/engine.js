@@ -1,4 +1,4 @@
-// Headless engine for Chess Combinations v0.3 (rule variants via makeRules options). Board r=0 is rank 8 (black side), as in index.html.
+// Headless engine for Chess Combinations v0.4 (rule variants via makeRules options). Board r=0 is rank 8 (black side), as in index.html.
 'use strict';
 const opp = c => c === 'w' ? 'b' : 'w';
 const inB = (r, c) => r >= 0 && r < 8 && c >= 0 && c < 8;
@@ -33,7 +33,7 @@ function variants(rows) {
 
 function makeRules(over = {}) {
   const R = Object.assign({
-    target: 15, guard: true, kingImmune: true, kingBonus: true, rotations: true,
+    target: 15, guard: true, kingImmune: false, checkPts: 2, banner: true, kingBonus: true, rotations: true,
     catalog: BASE_CATALOG, maxPlies: 300,
   }, over);
   R.catalog = R.catalog.map(p => {
@@ -67,7 +67,7 @@ function initState() {
   for (let f = 0; f < 8; f++) { B[0][f] = mk(back[f], 'b', 0, f); B[1][f] = mk('P', 'b', 1, f); B[6][f] = mk('P', 'w', 6, f); B[7][f] = mk(back[f], 'w', 7, f); }
   return { board: B, reserve: { w: [], b: [] }, score: { w: 0, b: 0 }, turn: 'w', ep: null, finalFor: null, over: null, ply: 0, stats: newStats() };
 }
-function newStats() { return { cash: [], captures: { w: 0, b: 0 }, capturedTypes: {}, places: { w: 0, b: 0 }, promos: 0, broken: { w: 0, b: 0 }, kingBlocks: 0 }; }
+function newStats() { return { kingKnocks: { w: 0, b: 0 }, bannerPlaces: { w: 0, b: 0 }, cash: [], captures: { w: 0, b: 0 }, capturedTypes: {}, places: { w: 0, b: 0 }, promos: 0, broken: { w: 0, b: 0 }, kingBlocks: 0 }; }
 function cloneState(S) {
   return { board: S.board.map(r => r.slice()), reserve: { w: S.reserve.w.slice(), b: S.reserve.b.slice() }, score: { ...S.score }, turn: S.turn, ep: S.ep, finalFor: S.finalFor, over: S.over, ply: S.ply, stats: S.stats };
 }
@@ -122,9 +122,18 @@ function attackMap(S, col, R) {
   }
   return A;
 }
-function placeTargets(S, col, o) {
+function kingPos(S, col) { for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) { const p = S.board[r][c]; if (p && p.c === col && p.t === 'K') return [r, c]; } return null; }
+// Banner: empty squares next to own king, outside the opponent's starting ranks.
+function bannerSquares(S, col, R) {
+  if (!R || !R.banner) return []; const k = kingPos(S, col); if (!k) return []; const out = [];
+  for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) { const r = k[0] + dr, c = k[1] + dc;
+    if ((dr || dc) && inB(r, c) && !S.board[r][c] && !isHome(opp(col), r) && !isHome(col, r)) out.push([r, c]); }
+  return out;
+}
+function placeTargets(S, col, o, R) {
   const rows = o.t === 'P' ? [pawnRow(col)] : (col === 'w' ? [6, 7] : [0, 1]), out = [];
   for (const r of rows) for (let c = 0; c < 8; c++) { if (S.board[r][c]) continue; if (o.t === 'B' && ((r + c) % 2 === 0) !== o.lt) continue; out.push({ r, c }); }
+  if (o.t !== 'K') for (const [r, c] of bannerSquares(S, col, R)) { if (o.t === 'B' && ((r + c) % 2 === 0) !== o.lt) continue; if (o.t === 'P' && r === lastRow(col)) continue; out.push({ r, c, banner: true }); }
   return out;
 }
 function toReserve(S, t) { const o = { t: t.t, c: t.c }; if (t.t === 'B') o.lt = t.lt; S.reserve[t.c].push(o); }
@@ -147,7 +156,7 @@ function actions(S, R) {
   }
   const seenKinds = new Set();
   S.reserve[col].forEach((o, i) => { const k = o.t + (o.t === 'B' ? (o.lt ? 'l' : 'd') : ''); if (seenKinds.has(k)) return; seenKinds.add(k);
-    for (const t of placeTargets(S, col, o)) out.push({ type: 'place', i, r: t.r, c: t.c }); });
+    for (const t of placeTargets(S, col, o, R)) out.push({ type: 'place', i, r: t.r, c: t.c, banner: !!t.banner }); });
   return out;
 }
 function doPromo(S, r, c, kind) {
@@ -159,7 +168,8 @@ function applyAction(S, a, R, track = true) {
   const B = S.board, col = S.turn;
   if (a.type === 'move') {
     const p = Object.assign({}, B[a.fr][a.fc]);
-    if (a.cap) { const t = B[a.r][a.c]; toReserve(S, t); if (track) { S.stats.captures[col]++; S.stats.capturedTypes[t.t] = (S.stats.capturedTypes[t.t] || 0) + 1; } }
+    if (a.cap) { const t = B[a.r][a.c]; toReserve(S, t); if (track) { S.stats.captures[col]++; S.stats.capturedTypes[t.t] = (S.stats.capturedTypes[t.t] || 0) + 1; }
+      if (t.t === 'K' && R.checkPts) { S.score[col] += R.checkPts; if (track) S.stats.kingKnocks[col]++; if (!S.finalFor && S.score[col] >= R.target) S.finalFor = opp(col); } }
     if (a.ep) { toReserve(S, B[a.ep.r][a.ep.c]); B[a.ep.r][a.ep.c] = null; if (track) S.stats.captures[col]++; }
     B[a.r][a.c] = p; B[a.fr][a.fc] = null; p.moved = true;
     if (R.bump && (a.cap || a.ep)) { toReserve(S, p); B[a.r][a.c] = null; }
@@ -167,8 +177,8 @@ function applyAction(S, a, R, track = true) {
     S.ep = a.dbl ? { r: (a.fr + a.r) / 2, c: a.fc } : null;
     if (a.promo && B[a.r][a.c]) doPromo(S, a.r, a.c, a.promo);
   } else if (a.type === 'place') {
-    const o = S.reserve[col].splice(a.i, 1)[0]; const p = { t: o.t, c: col, moved: o.t !== 'P' }; if (o.t === 'B') p.lt = o.lt;
-    B[a.r][a.c] = p; S.ep = null; if (track) S.stats.places[col]++;
+    const o = S.reserve[col].splice(a.i, 1)[0]; const p = { t: o.t, c: col, moved: o.t !== 'P' || a.r !== pawnRow(col) }; if (o.t === 'B') p.lt = o.lt;
+    B[a.r][a.c] = p; S.ep = null; if (track) { S.stats.places[col]++; if (a.banner) S.stats.bannerPlaces[col]++; }
   } else if (a.type === 'latepromo') { doPromo(S, a.r, a.c, a.promo); S.ep = null; }
 }
 function endTurn(S) {
@@ -239,17 +249,21 @@ function pieceDist(t, col, r, c, tr, tc) {
   if (t === 'P') { if (tc !== c) return 99; const fwd = col === 'w' ? r - tr : tr - r; if (fwd < 0) return 99; if (fwd >= 2 && r === pawnRow(col)) return fwd - 1; return fwd; }
   return DIST[t][r * 8 + c][tr * 8 + tc];
 }
-function reserveDist(o, col, tr, tc) {
-  if (o.t === 'P') return 1 + pieceDist('P', col, pawnRow(col), tc, tr, tc);
-  let best = 99; const rows = col === 'w' ? [6, 7] : [0, 1];
-  for (const r of rows) for (let c = 0; c < 8; c++) { if (o.t === 'B' && ((r + c) % 2 === 0) !== o.lt) continue; const d = DIST[o.t][r * 8 + c][tr * 8 + tc]; if (d < best) best = d; }
+function reserveDist(o, col, tr, tc, banner) {
+  let best = 99;
+  if (o.t === 'P') best = pieceDist('P', col, pawnRow(col), tc, tr, tc);
+  else { const rows = col === 'w' ? [6, 7] : [0, 1];
+    for (const r of rows) for (let c = 0; c < 8; c++) { if (o.t === 'B' && ((r + c) % 2 === 0) !== o.lt) continue; const d = DIST[o.t][r * 8 + c][tr * 8 + tc]; if (d < best) best = d; } }
+  if (banner) for (const [r, c] of banner) { if (o.t === 'B' && ((r + c) % 2 === 0) !== o.lt) continue; if (o.t === 'P' && r === lastRow(col)) continue;
+    const d = o.t === 'P' ? pieceDist('P', col, r, c, tr, tc) - (r === pawnRow(col) ? 0 : 0) : DIST[o.t][r * 8 + c][tr * 8 + tc]; if (d < best) best = d; }
   return 1 + best;
 }
 // Best plan values: for each pattern, min estimated moves to complete (greedy assignment).
 function planCosts(S, col, R) {
   const B = S.board, pcs = [];
   for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) { const p = B[r][c]; if (p && p.c === col && p.t !== 'K') pcs.push({ t: p.t, r, c, lt: p.lt, res: false }); }
-  S.reserve[col].forEach(o => pcs.push({ t: o.t, lt: o.lt, res: true, o }));
+  S.reserve[col].forEach(o => { if (o.t !== 'K') pcs.push({ t: o.t, lt: o.lt, res: true, o }); });
+  const banner = bannerSquares(S, col, R);
   const out = new Float64Array(R.catalog.length).fill(99);
   R.catalog.forEach((p, pi) => {
     let best = 99;
@@ -260,7 +274,7 @@ function planCosts(S, col, R) {
         if (isHome(col, r)) { ok = false; break; }
         const q = B[r][c];
         if (ch === 'o') { if (q) cost += q.c === col ? 1 : 2; continue; }
-        if (q && q.c !== col) cost += q.t === 'K' && R.kingImmune ? 6 : 2; // enemy in slot: knock it first
+        if (q && q.c !== col) cost += q.t === 'K' && R.kingImmune ? 6 : (R.guard && attacked(S, r, c, q.c) ? 3 : 2); // enemy in slot: knock it first
         else if (q && q.c === col && (ch === '*' ? q.t !== 'K' : q.t === ch)) { // already right: claim it
           const k = pcs.findIndex((x, i) => !used[i] && !x.res && x.r === r && x.c === c); if (k >= 0) { used[k] = 1; continue; } }
         else if (q && q.c === col) cost += 1; // own wrong piece must step aside
@@ -268,7 +282,7 @@ function planCosts(S, col, R) {
         for (let i = 0; i < pcs.length; i++) { if (used[i]) continue; const x = pcs[i];
           if (ch !== '*' && x.t !== ch) continue; if (ch === '*' && x.t === 'P' && false) continue;
           if (x.t === 'B' && ((r + c) % 2 === 0) !== x.lt) continue;
-          const d = x.res ? reserveDist(x.o, col, r, c) : pieceDist(x.t, col, x.r, x.c, r, c);
+          const d = x.res ? reserveDist(x.o, col, r, c, banner) : pieceDist(x.t, col, x.r, x.c, r, c);
           if (d < bd) { bd = d; bi = i; } }
         if (bi < 0 || bd >= 99) { ok = false; break; }
         used[bi] = 1; cost += bd; if (cost >= best) { ok = false; break; }
@@ -280,3 +294,5 @@ function planCosts(S, col, R) {
   return out;
 }
 module.exports.planCosts = planCosts;
+module.exports.kingPos = kingPos;
+module.exports.canKnock = canKnock;

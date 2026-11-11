@@ -33,6 +33,13 @@ function evaluate(S, me, R, W, ctx, a) {
   const po = (a && (a.cap || a.ep)) || !ctx ? planValue(R, E.planCosts(S, op, R), W.gamma) : ctx.oppPlan;
   let v = (S.score[me] - S.score[op]) + myC - W.oppNext * oppNext + W.pot * pm - W.potO * po - W.res * (S.reserve[me].length - S.reserve[op].length);
   if (S.score[op] + oppNext >= R.target && !S.finalFor) v -= W.danger;
+  // king: exposure under the check rule, forward base under the banner rule
+  const mk = E.kingPos(S, me), ok = E.kingPos(S, op);
+  if (R.checkPts) {
+    if (mk && attO[mk[0] * 8 + mk[1]] && E.canKnock(S, S.board[mk[0]][mk[1]], mk[0], mk[1], R)) v -= W.kingRisk * (R.checkPts + (R.banner ? 1.5 : 0.5));
+    if (ok) { const attM = E.attackMap(S, me, R); if (attM[ok[0] * 8 + ok[1]] && E.canKnock(S, S.board[ok[0]][ok[1]], ok[0], ok[1], R)) v += W.kingThreat * R.checkPts; }
+  }
+  if (R.banner && mk) { const adv = me === 'w' ? 6 - mk[0] : mk[0] - 1; v += W.kingFwd * Math.max(0, Math.min(3, adv)); }
   return v;
 }
 
@@ -91,7 +98,7 @@ function chooseAction(S, R, bot, rand) {
   return scored[0][1];
 }
 
-const W_BASE = { risk: 0.25, safe: 0.85, oppNext: 1.0, pot: 0.8, potO: 0.6, res: 0.05, danger: 30, gamma: 0.7 };
+const W_BASE = { risk: 0.25, safe: 0.85, oppNext: 1.0, pot: 0.8, potO: 0.6, res: 0.05, danger: 30, gamma: 0.7, kingRisk: 0.9, kingThreat: 0.3, kingFwd: 0.35 };
 const BOTS = {
   random: { kind: 'random', cash: 'greedy' },
   greedy: { kind: 'heur', cash: 'greedy', W: W_BASE, noise: 0.3 },

@@ -60,6 +60,11 @@ header p{margin:0;color:var(--muted)}
 .sq.cap .dot{width:86%;height:86%;background:transparent;border:4px solid var(--sel-soft);box-sizing:border-box}
 .sq:focus-visible{outline:3px solid var(--sel);outline-offset:-3px;z-index:2}
 .sq.own{cursor:grab}
+.sq.bn .dot{background:var(--accent);opacity:.75;width:30%;height:30%;border-radius:3px;transform:rotate(45deg)}
+.xk{position:absolute;inset:7%;border-radius:50%;border:3px solid var(--threat);pointer-events:none;z-index:0}
+.sw.x{border-radius:50%;border:2px solid var(--threat);background:transparent}
+.sw.b{background:var(--accent);opacity:.75;transform:rotate(45deg) scale(.7);border-radius:2px}
+.warn{color:var(--threat);font-weight:500}
 .shield{position:absolute;right:6%;top:6%;width:26%;height:30%;z-index:2;pointer-events:none;background:var(--sel);
   clip-path:polygon(50% 0,100% 18%,100% 55%,50% 100%,0 55%,0 18%);box-shadow:0 0 0 2px var(--panel)}
 .sw.s{background:var(--sel);clip-path:polygon(50% 0,100% 18%,100% 55%,50% 100%,0 55%,0 18%);border-radius:0}
@@ -158,6 +163,8 @@ table.pts-t td{border:1px solid var(--line);padding:3px 8px;text-align:center}
       <span><i class="sw g"></i><span id="lg-me">your combination</span></span>
       <span><i class="sw o"></i><span id="lg-op">opponent's combination</span></span>
       <span><i class="sw s"></i><span id="lg-guard">defended: can't be knocked</span></span>
+      <span><i class="sw x"></i><span id="lg-xk">king exposed: can be knocked for +2</span></span>
+      <span><i class="sw b"></i><span id="lg-bn">banner: place from reserve next to your king</span></span>
     </div>
   </div>
   <div class="panel" id="panel"></div>
@@ -182,9 +189,11 @@ const sizePts=n=>1+(n-4)*(n-3)/2;
 /* ---------- языки ---------- */
 const I18N={
   en:{
-    title:'Chess Combinations',sub:'Rules prototype v0.3 · two players or against a bot',
+    title:'Chess Combinations',sub:'Rules prototype v0.4 · two players or against a bot',
     opponent:'Opponent',oppNone:'Two players',oppB:'Bot plays Black',oppW:'Bot plays White',botThinking:'Bot is thinking…',
     lgGuard:"defended: can't be knocked",guardedAria:"defended, can't be knocked",
+    lgXk:'king exposed: can be knocked for +2',exposedAria:'exposed king, can be knocked for +2',lgBn:'banner: place from reserve next to your king',
+    kingExposedMe:'Your king is exposed: the opponent can knock it for +2.',
     board:'Board',lgHome:'starting ranks',lgMe:'your combination',lgOp:"opponent's combination",language:'Language',
     piece:{K:'king',Q:'queen',R:'rook',B:'bishop',N:'knight',P:'pawn'},
     pieceA:{K:'king',Q:'queen',R:'rook',B:'bishop',N:'knight',P:'pawn'},
@@ -196,7 +205,7 @@ const I18N={
     win:(c,a,b)=>`${c==='w'?'White':'Black'} win, ${a} : ${b}.`,draw:(a,b)=>`Draw, ${a} : ${b}.`,
     finalBanner:(reached,T,mine,f)=>`${reached} reached ${T}. `+(mine?'This is your last move.':`${f} get one last move.`),
     stPromo:'Promotion: choose a piece from your reserve to replace the pawn.',
-    stPlace:'Choose a square on your starting ranks.',
+    stPlace:'Choose a square on your starting ranks or, under the banner, next to your king.',
     stTurn:(c,n,can)=>`${c==='w'?'White':'Black'} to move, move ${n}. `+(can?'You can cash in combinations, then take one action.':'One action: move a piece or bring one in from your reserve.'),
     swap:'Swap from reserve',keepPawn:'Keep the pawn',cancel:'Cancel',
     cashIn:'Cash in',plusKing:' + king',
@@ -215,23 +224,26 @@ const I18N={
     rules:'Rules in brief',
     rulesList:(cat,T)=>[
       'Pieces move as in chess. A captured piece is not removed: it goes to its owner\'s reserve. There is no check or checkmate.',
-      'A piece defended by one of its own pieces cannot be knocked. The king can never be knocked.',
+      'A piece defended by one of its own pieces cannot be knocked.',
+      'Check: an undefended king can be knocked into the reserve, and whoever knocks it scores +2.',
       cat?'A combination is a pattern from the catalog, with all its pieces outside your starting ranks. A king next to the pattern raises its score.':'A combination is 4+ of your pieces connected like king moves, all outside your starting ranks.',
       'At the start of your turn you may cash in any of your complete combinations for free, then take one action: move a piece or bring one in from your reserve.',
-      'A reserve piece goes on any empty square of your two starting ranks; a bishop on its own colour, a pawn on your second rank.',
+      'A reserve piece goes on any empty square of your two starting ranks (a bishop on its own colour, a pawn on your second rank) or, under the banner rule, on an empty square next to your king outside the opponent\'s starting ranks.',
       'A pawn on the last rank swaps for any piece from your reserve.',
       `The first to reach ${T} wins, unless the opponent scores more on their last move.`],
-    logMove:(txt,cap,ep)=>txt+(cap?` — ${I18N.en.piece[cap]} to reserve`:ep?' — en passant, pawn to reserve':''),
-    logPlace:(t,s)=>`${LET[t]}@${s} — ${I18N.en.piece[t]} from reserve`,
+    logMove:(txt,cap,ep,chk)=>txt+(cap?` — ${I18N.en.piece[cap]} to reserve`:ep?' — en passant, pawn to reserve':'')+(chk?`, check +${CHECK_PTS}`:''),
+    logPlace:(t,s,bn)=>`${LET[t]}@${s} — ${I18N.en.piece[t]} from reserve${bn?' under the banner':''}`,
     logPromo:(s,t)=>`${s}: pawn swapped for a ${I18N.en.piece[t]} from reserve`,
     logKeep:'pawn stays a pawn',
     logCash:(name,king,pts)=>`cashed in: ${name}${king?' with king':''}, +${pts}`,
     logDemo:'Example position: scores and reserves are illustrative.',
   },
   ru:{
-    title:'Шахматы-комбинации',sub:'Прототип правил v0.3 · вдвоём или против бота',
+    title:'Шахматы-комбинации',sub:'Прототип правил v0.4 · вдвоём или против бота',
     opponent:'Соперник',oppNone:'Вдвоём',oppB:'Бот за чёрных',oppW:'Бот за белых',botThinking:'Бот думает…',
     lgGuard:'защищена: отбросить нельзя',guardedAria:'защищена, отбросить нельзя',
+    lgXk:'король без защиты: его можно отбросить за +2',exposedAria:'король без защиты, его можно отбросить за +2',lgBn:'знамя: выставление из резерва рядом с королём',
+    kingExposedMe:'Ваш король без защиты: соперник может отбросить его за +2.',
     board:'Доска',lgHome:'начальные горизонтали',lgMe:'ваша комбинация',lgOp:'комбинация соперника',language:'Язык',
     piece:{K:'король',Q:'ферзь',R:'ладья',B:'слон',N:'конь',P:'пешка'},
     pieceA:{K:'короля',Q:'ферзя',R:'ладью',B:'слона',N:'коня',P:'пешку'},
@@ -243,7 +255,7 @@ const I18N={
     win:(c,a,b)=>`Победа ${c==='w'?'белых':'чёрных'}: ${a} : ${b}.`,draw:(a,b)=>`Ничья, ${a} : ${b}.`,
     finalBanner:(reached,T,mine,f)=>`${reached} набрали ${T}. `+(mine?'Это ваш последний ход.':`У ${f} будет последний ход.`),
     stPromo:'Превращение: выберите фигуру из резерва, которая встанет на место пешки.',
-    stPlace:'Выберите клетку на своих начальных горизонталях.',
+    stPlace:'Выберите клетку на своих начальных горизонталях или под знамя — рядом с королём.',
     stTurn:(c,n,can)=>`Ход ${c==='w'?'белых':'чёрных'}, № ${n}. `+(can?'Можно засчитать комбинации, затем одно действие.':'Одно действие: ход фигурой или фигура из резерва.'),
     swap:'Обмен с резервом',keepPawn:'Оставить пешку',cancel:'Отмена',
     cashIn:'Засчитать',plusKing:' + король',
@@ -262,14 +274,15 @@ const I18N={
     rules:'Правила коротко',
     rulesList:(cat,T)=>[
       'Ходы как в шахматах. Взятая фигура не снимается, а уходит в резерв владельца. Шаха и мата нет.',
-      'Фигуру, которую защищает своя фигура, отбросить нельзя. Короля отбросить нельзя никогда.',
+      'Фигуру, которую защищает своя фигура, отбросить нельзя.',
+      'Шах: незащищённого короля можно отбросить в резерв, отбросивший получает +2.',
       cat?'Комбинация — узор из каталога; все его фигуры вне своих начальных горизонталей. Король рядом с узором увеличивает очки.':'Комбинация: 4+ своих фигуры, связанные как ходы короля, все вне своих начальных горизонталей.',
       'В начале хода можно засчитать любые свои комбинации целиком (бесплатно), затем одно действие: ход фигурой или выставление из резерва.',
-      'Из резерва фигура ставится на свободную клетку своих двух начальных горизонталей; слон на свой цвет, пешка на вторую горизонталь.',
+      'Из резерва фигура ставится на свободную клетку своих двух начальных горизонталей (слон на свой цвет, пешка на вторую горизонталь) или по правилу знамени — на свободную клетку рядом со своим королём, кроме начальных горизонталей соперника.',
       'Пешка на последней горизонтали обменивается на любую фигуру из резерва.',
       `Кто первым набрал ${T}, тот победит, если соперник за последний ход не наберёт больше.`],
-    logMove:(txt,cap,ep)=>txt+(cap?` — ${I18N.ru.piece[cap]} в резерв`:ep?' — на проходе, пешка в резерв':''),
-    logPlace:(t,s)=>`${LET[t]}@${s} — ${I18N.ru.piece[t]} из резерва`,
+    logMove:(txt,cap,ep,chk)=>txt+(cap?` — ${I18N.ru.piece[cap]} в резерв`:ep?' — на проходе, пешка в резерв':'')+(chk?`, шах +${CHECK_PTS}`:''),
+    logPlace:(t,s,bn)=>`${LET[t]}@${s} — ${I18N.ru.piece[t]} из резерва${bn?' под знамя':''}`,
     logPromo:(s,t)=>`${s}: пешка обменяна на ${I18N.ru.pieceA[t]} из резерва`,
     logKeep:'пешка остаётся пешкой',
     logCash:(name,king,pts)=>`засчёт: ${name}${king?' с королём':''}, +${pts}`,
@@ -340,9 +353,9 @@ function clearSel(){sel=null;moves=[];selRes=null;placeT=[]}
 function log(e){e.n=S.moveNo;e.c=S.turn;S.log.push(e)}
 function logText(e){const l=L();
   switch(e.k){
-    case 'move':return l.logMove(e.txt,e.cap,e.ep);
+    case 'move':return l.logMove(e.txt,e.cap,e.ep,e.chk);
     case 'castle':return e.long?'0-0-0':'0-0';
-    case 'place':return l.logPlace(e.t,e.sq);
+    case 'place':return l.logPlace(e.t,e.sq,e.banner);
     case 'promo':return l.logPromo(e.sq,e.t);
     case 'keep':return l.logKeep;
     case 'cash':return l.logCash(e.pid?CAT_BY_ID[e.pid].name[lang]:l.sizeLabel(e.size),e.king,e.pts);
@@ -362,8 +375,17 @@ function attacked(St,r,c,col){
     while(inB(x,y)){const q=B[x][y];if(q){if(q.c===col&&(q.t==='Q'||(dg?q.t==='B':q.t==='R')))return true;break}x+=a;y+=b}}
   return false;
 }
-const guarded=(St,r,c)=>{const t=St.board[r][c];return !!t&&t.t!=='K'&&GUARD&&attacked(St,r,c,t.c)};
-const canKnock=(St,r,c)=>{const t=St.board[r][c];return t.t!=='K'&&!(GUARD&&attacked(St,r,c,t.c))};
+/* Шах: незащищённого короля можно отбросить, отбросивший получает CHECK_PTS очков. */
+const CHECK_PTS=2;
+const canKnock=(St,r,c)=>{const t=St.board[r][c];return !(GUARD&&attacked(St,r,c,t.c))};
+function kingPos(St,col){for(let r=0;r<8;r++)for(let c=0;c<8;c++){const p=St.board[r][c];if(p&&p.c===col&&p.t==='K')return[r,c]}return null}
+/* Король под угрозой: соперник достаёт до него, а своя фигура его не защищает. */
+function kingExposed(St,col){const k=kingPos(St,col);if(!k||attacked(St,k[0],k[1],col))return false;return attacked(St,k[0],k[1],opp(col))}
+/* Знамя: свободные клетки рядом со своим королём, кроме начальных горизонталей соперника. */
+function bannerSquares(St,col){const k=kingPos(St,col);if(!k)return[];const out=[];
+  for(let dr=-1;dr<=1;dr++)for(let dc=-1;dc<=1;dc++){const r=k[0]+dr,c=k[1]+dc;
+    if((dr||dc)&&inB(r,c)&&!St.board[r][c]&&!isHome(opp(col),r)&&!isHome(col,r))out.push([r,c])}
+  return out}
 /* reach=true: все клетки, куда фигура достаёт, включая защищённые вражеские (для подсказок и оценки бота) */
 function genMoves(r,c,St=S,reach=false){
   const B=St.board,p=B[r][c],res=[];
@@ -397,23 +419,27 @@ const hasPromo=col=>S.reserve[col].some(x=>x.t!=='P');
 
 function doMove(fr,fc,m){
   snap();const B=S.board,p=B[fr][fc];let cap=null;
-  if(m.cap){const t=B[m.r][m.c];toReserve(t);cap=t.t}
+  let chk=false;
+  if(m.cap){const t=B[m.r][m.c];toReserve(t);cap=t.t;if(t.t==='K'){chk=true;S.score[S.turn]+=CHECK_PTS}}
   if(m.ep){toReserve(B[m.ep.r][m.ep.c]);B[m.ep.r][m.ep.c]=null}
   B[m.r][m.c]=p;B[fr][fc]=null;p.moved=true;
   if(m.castle){const rk=B[fr][m.castle.from];B[fr][m.castle.to]=rk;B[fr][m.castle.from]=null;rk.moved=true;log({k:'castle',long:m.castle.from===0})}
-  else log({k:'move',txt:`${LET[p.t]}${sq(fr,fc)}${m.cap||m.ep?'×':'–'}${sq(m.r,m.c)}`,cap,ep:!!m.ep});
+  else log({k:'move',txt:`${LET[p.t]}${sq(fr,fc)}${m.cap||m.ep?'×':'–'}${sq(m.r,m.c)}`,cap,ep:!!m.ep,chk});
+  if(chk&&!S.finalFor&&S.score[S.turn]>=target())S.finalFor=opp(S.turn);
   S.ep=m.dbl?{r:(fr+m.r)/2,c:fc}:null;S.last=[[fr,fc],[m.r,m.c]];
   if(p.t==='P'&&m.r===lastRow(p.c)&&hasPromo(p.c)){S.promo={r:m.r,c:m.c,fresh:true};clearSel();render();return}
   endTurn();
 }
 function place(i,r,c){
   snap();const col=S.turn,o=S.reserve[col].splice(i,1)[0];
-  const p={t:o.t,c:col,moved:o.t!=='P'};if(o.t==='B')p.lt=o.lt;
-  S.board[r][c]=p;S.ep=null;S.last=[[r,c]];log({k:'place',t:o.t,sq:sq(r,c)});endTurn();
+  const p={t:o.t,c:col,moved:o.t!=='P'||r!==pawnRow(col)};if(o.t==='B')p.lt=o.lt;
+  const banner=!isHome(col,r);
+  S.board[r][c]=p;S.ep=null;S.last=[[r,c]];log({k:'place',t:o.t,sq:sq(r,c),banner});endTurn();
 }
 function placeTargets(o,St=S){
   const col=St.turn,rows=o.t==='P'?[pawnRow(col)]:(col==='w'?[6,7]:[0,1]),out=[];
   for(const r of rows)for(let c=0;c<8;c++){if(St.board[r][c])continue;if(o.t==='B'&&((r+c)%2===0)!==o.lt)continue;out.push({r,c})}
+  if(o.t!=='K')for(const[r,c]of bannerSquares(St,col)){if(o.t==='B'&&((r+c)%2===0)!==o.lt)continue;if(o.t==='P'&&r===lastRow(col))continue;out.push({r,c,banner:true})}
   return out;
 }
 function promote(i){
@@ -495,7 +521,7 @@ function onCell(r,c){
 /* Смотрит на один ход вперёд. Оценка позиции: очки, собранные комбинации (с учётом риска, что их сломают),
    комбинации соперника, которые он засчитает следующим ходом, и сколько ходов осталось до лучших узоров. */
 let botSide=null,botBusy=false,botTimer=null;
-const BOT_W={risk:.25,safe:.85,oppNext:1,pot:.8,potO:.6,res:.05,danger:30,gamma:.7,noise:.3};
+const BOT_W={risk:.25,safe:.85,oppNext:1,pot:.8,potO:.6,res:.05,danger:30,gamma:.7,noise:.3,kingRisk:.9,kingThreat:.3,kingFwd:.35};
 const UPGRADE={zastava:'bastion',falanga:'stena',brigada:'polk'};
 CATALOG.forEach(p=>{p.places=[];for(const v of p.vars){const h=Math.max(...v.map(x=>x[0]))+1,w=Math.max(...v.map(x=>x[1]))+1;
   for(let r0=0;r0+h<=8;r0++)for(let c0=0;c0+w<=8;c0++)p.places.push(v.map(([a,b,ch])=>[r0+a,c0+b,ch]))}});
@@ -513,28 +539,32 @@ function pDist(t,col,r,c,tr,tc){
   if(t==='P'){if(tc!==c)return 99;const f=col==='w'?r-tr:tr-r;if(f<0)return 99;return f>=2&&r===pawnRow(col)?f-1:f}
   return DIST[t][r*8+c][tr*8+tc];
 }
-function rDist(o,col,tr,tc){
-  if(o.t==='P')return 1+pDist('P',col,pawnRow(col),tc,tr,tc);
-  let b=99;for(const r of col==='w'?[6,7]:[0,1])for(let c=0;c<8;c++){if(o.t==='B'&&((r+c)%2===0)!==o.lt)continue;const d=DIST[o.t][r*8+c][tr*8+tc];if(d<b)b=d}
+function rDist(o,col,tr,tc,banner){
+  let b=99;
+  if(o.t==='P')b=pDist('P',col,pawnRow(col),tc,tr,tc);
+  else for(const r of col==='w'?[6,7]:[0,1])for(let c=0;c<8;c++){if(o.t==='B'&&((r+c)%2===0)!==o.lt)continue;const d=DIST[o.t][r*8+c][tr*8+tc];if(d<b)b=d}
+  if(banner)for(const[r,c]of banner){if(o.t==='B'&&((r+c)%2===0)!==o.lt)continue;if(o.t==='P'&&r===lastRow(col))continue;
+    const d=o.t==='P'?pDist('P',col,r,c,tr,tc):DIST[o.t][r*8+c][tr*8+tc];if(d<b)b=d}
   return 1+b;
 }
 function planCosts(St,col){
   const B=St.board,pcs=[];
   for(let r=0;r<8;r++)for(let c=0;c<8;c++){const p=B[r][c];if(p&&p.c===col&&p.t!=='K')pcs.push({t:p.t,r,c,lt:p.lt,res:false})}
-  St.reserve[col].forEach(o=>pcs.push({t:o.t,lt:o.lt,res:true,o}));
+  St.reserve[col].forEach(o=>{if(o.t!=='K')pcs.push({t:o.t,lt:o.lt,res:true,o})});
+  const banner=bannerSquares(St,col);
   return CATALOG.map(p=>{let best=99;
     for(const pl of p.places){let cost=0,ok=true;const used=new Uint8Array(pcs.length);
       for(const[r,c,ch]of pl){
         if(isHome(col,r)){ok=false;break}
         const q=B[r][c];
         if(ch==='o'){if(q)cost+=q.c===col?1:2;continue}
-        if(q&&q.c!==col)cost+=q.t==='K'?6:(GUARD&&attacked(St,r,c,q.c)?3:2);
+        if(q&&q.c!==col)cost+=GUARD&&attacked(St,r,c,q.c)?3:2;
         else if(q&&q.c===col&&(ch==='*'?q.t!=='K':q.t===ch)){const k=pcs.findIndex((x,i)=>!used[i]&&!x.res&&x.r===r&&x.c===c);if(k>=0){used[k]=1;continue}}
         else if(q&&q.c===col)cost+=1;
         let bd=99,bi=-1;
         for(let i=0;i<pcs.length;i++){if(used[i])continue;const x=pcs[i];
           if(ch!=='*'&&x.t!==ch)continue;if(x.t==='B'&&((r+c)%2===0)!==x.lt)continue;
-          const d=x.res?rDist(x.o,col,r,c):pDist(x.t,col,x.r,x.c,r,c);if(d<bd){bd=d;bi=i}}
+          const d=x.res?rDist(x.o,col,r,c,banner):pDist(x.t,col,x.r,x.c,r,c);if(d<bd){bd=d;bi=i}}
         if(bi<0||bd>=99){ok=false;break}
         used[bi]=1;cost+=bd;if(cost>=best){ok=false;break}}
       if(ok&&cost<best)best=cost}
@@ -567,13 +597,13 @@ function botSwap(St,r,c,kind){const col=St.turn,i=St.reserve[col].findIndex(x=>k
 function botApply(St,a){
   const B=St.board,col=St.turn;
   if(a.type==='move'){const p=Object.assign({},B[a.fr][a.fc]);
-    if(a.cap)toReserve(B[a.r][a.c],St);
+    if(a.cap){const t=B[a.r][a.c];toReserve(t,St);if(t.t==='K'){St.score[col]+=CHECK_PTS;if(!St.finalFor&&St.score[col]>=target())St.finalFor=opp(col)}}
     if(a.ep){toReserve(B[a.ep.r][a.ep.c],St);B[a.ep.r][a.ep.c]=null}
     B[a.r][a.c]=p;B[a.fr][a.fc]=null;p.moved=true;
     if(a.castle){const rk=Object.assign({},B[a.fr][a.castle.from]);B[a.fr][a.castle.to]=rk;B[a.fr][a.castle.from]=null;rk.moved=true}
     St.ep=a.dbl?{r:(a.fr+a.r)/2,c:a.fc}:null;
     if(a.promo)botSwap(St,a.r,a.c,a.promo)}
-  else if(a.type==='place'){const o=St.reserve[col].splice(a.i,1)[0];const p={t:o.t,c:col,moved:o.t!=='P'};if(o.t==='B')p.lt=o.lt;B[a.r][a.c]=p;St.ep=null}
+  else if(a.type==='place'){const o=St.reserve[col].splice(a.i,1)[0];const p={t:o.t,c:col,moved:o.t!=='P'||a.r!==pawnRow(col)};if(o.t==='B')p.lt=o.lt;B[a.r][a.c]=p;St.ep=null}
   else if(a.type==='latepromo'){botSwap(St,a.r,a.c,a.promo);St.ep=null}
 }
 function botEval(St,me,oppPlan,recalcOpp){
@@ -586,6 +616,10 @@ function botEval(St,me,oppPlan,recalcOpp){
     -BOT_W.res*(St.reserve[me].length-St.reserve[op].length);
   if(St.score[op]+oppNext>=T&&!St.finalFor)v-=BOT_W.danger;
   if(St.finalFor===me){const a=St.score[me],b=St.score[op];v+=a>b?1e5:a<b?-1e5:0}
+  // король: риск шаха, угроза чужому королю, продвижение под знамя
+  if(kingExposed(St,me))v-=BOT_W.kingRisk*(CHECK_PTS+1.5);
+  if(kingExposed(St,op))v+=BOT_W.kingThreat*CHECK_PTS;
+  const mk=kingPos(St,me);if(mk){const adv=me==='w'?6-mk[0]:mk[0]-1;v+=BOT_W.kingFwd*Math.max(0,Math.min(3,adv))}
   return v;
 }
 function kingNear(St,me,g){let kr=-1,kc=-1;
@@ -618,6 +652,10 @@ function botChoose(){
   return best}
 function botTurn(){
   botTimer=null;if(!botSide||S.over||S.turn!==botSide)return;
+  try{botTurnInner()}catch(err){console.error(err);botBusy=false;if(!S.over&&S.turn===botSide&&!S.promo){/* запасной ход: первое допустимое действие */
+    const a=botActions(S)[0];if(a&&a.type==='move')doMove(a.fr,a.fc,genMoves(a.fr,a.fc).find(x=>x.r===a.r&&x.c===a.c));else if(a&&a.type==='place')place(a.i,a.r,a.c);else endTurn()}}
+}
+function botTurnInner(){
   botBusy=true;
   for(let guard=0;guard<6&&!S.finalFor;guard++){const i=botCashIndex();if(i<0)break;cash(i)}
   const a=botChoose();
@@ -646,6 +684,8 @@ function renderStatic(){
   document.getElementById('lg-me').textContent=l.lgMe;
   document.getElementById('lg-op').textContent=l.lgOp;
   document.getElementById('lg-guard').textContent=l.lgGuard;
+  document.getElementById('lg-xk').textContent=l.lgXk;
+  document.getElementById('lg-bn').textContent=l.lgBn;
   const seg=document.getElementById('lang-seg');seg.setAttribute('aria-label',l.language);
   seg.querySelectorAll('button').forEach(b=>{const on=b.dataset.l===lang;b.classList.toggle('on',on);b.setAttribute('aria-pressed',on)});
 }
@@ -656,6 +696,7 @@ function renderBoard(){
   op.forEach(g=>(g.king?g.cells.concat([g.king]):g.cells).forEach(([r,c])=>theirs.add(r*8+c)));
   const last=new Set((S.last||[]).map(([r,c])=>r*8+c));
   const canAct=!S.over&&!S.promo&&!humanLocked();
+  const exposed=new Set();for(const col of['w','b'])if(kingExposed(S,col)){const k=kingPos(S,col);exposed.add(k[0]*8+k[1])}
   const shield=new Set();
   if(sel){for(const m of genMoves(sel[0],sel[1],S,true))if(m.cap&&!moves.some(x=>x.r===m.r&&x.c===m.c))shield.add(m.r*8+m.c)}
   let h='';
@@ -671,10 +712,11 @@ function renderBoard(){
     if(drag&&drag.active&&drag.src==='board'&&drag.r===r&&drag.c===c)cls.push('lift');
     const mv=moves.find(x=>x.r===r&&x.c===c)||placeT.find(x=>x.r===r&&x.c===c);
     if(mv&&(mv.cap||mv.ep))cls.push('cap');
-    const sh=shield.has(k);
-    const lab=sq(r,c)+(p?`, ${l.colorAdj(p.c)} ${l.piece[p.t]}`:'')+(sh?`, ${l.guardedAria}`:'');
+    if(mv&&mv.banner)cls.push('bn');
+    const sh=shield.has(k),xk=exposed.has(k);
+    const lab=sq(r,c)+(p?`, ${l.colorAdj(p.c)} ${l.piece[p.t]}`:'')+(sh?`, ${l.guardedAria}`:'')+(xk?`, ${l.exposedAria}`:'');
     h+=`<button class="${cls.join(' ')}" data-act="cell" data-r="${r}" data-c="${c}" aria-label="${lab}">`
-      +(p?`<span class="pc ${p.c}">${glyph(p.t)}</span>`:'')+(mv?'<span class="dot"></span>':'')+(sh?'<span class="shield" aria-hidden="true"></span>':'')
+      +(p?`<span class="pc ${p.c}">${glyph(p.t)}</span>`:'')+(mv?'<span class="dot"></span>':'')+(sh?'<span class="shield" aria-hidden="true"></span>':'')+(xk?'<span class="xk" aria-hidden="true"></span>':'')
       +(i===7?`<span class="crd f">${FILES[c]}</span>`:'')+(j===0?`<span class="crd r">${8-r}</span>`:'')+'</button>';
   }
   document.getElementById('board').innerHTML=h;
@@ -721,6 +763,7 @@ function renderPanel(){
     if(S.promo)st=l.stPromo;
     else if(selRes!==null)st=l.stPlace;
     else st=l.stTurn(t,S.moveNo,me.length>0);
+    if(!S.promo&&selRes===null&&kingExposed(S,t))st+=` <span class="warn">${l.kingExposedMe}</span>`;
     if(humanLocked())st=`<span class="thinking">${l.botThinking}</span>`;
     h+=`<div class="status" aria-live="polite">${st}</div>`;
   }
