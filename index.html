@@ -60,6 +60,13 @@ header p{margin:0;color:var(--muted)}
 .sq.cap .dot{width:86%;height:86%;background:transparent;border:4px solid var(--sel-soft);box-sizing:border-box}
 .sq:focus-visible{outline:3px solid var(--sel);outline-offset:-3px;z-index:2}
 .sq.own{cursor:grab}
+.board-wrap{position:relative}
+.promo-pop{position:absolute;inset:0;z-index:20;display:grid;place-items:center;background:rgba(12,18,16,.45);border-radius:4px;padding:12px;box-sizing:border-box}
+.promo-pop .card{background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:14px 16px;width:min(100%,320px);
+  display:flex;flex-direction:column;gap:10px;box-shadow:0 12px 32px rgba(0,0,0,.3)}
+.promo-pop .card b{font-size:15px}
+.promo-pop .card p{margin:0;color:var(--muted);font-size:13px}
+.promo-pop .chip{width:44px;height:44px;font-size:30px}
 .sq.bn .dot{background:var(--accent);opacity:.75;width:30%;height:30%;border-radius:3px;transform:rotate(45deg)}
 .xk{position:absolute;inset:7%;border-radius:50%;border:3px solid var(--threat);pointer-events:none;z-index:0}
 .sw.x{border-radius:50%;border:2px solid var(--threat);background:transparent}
@@ -157,7 +164,10 @@ table.pts-t td{border:1px solid var(--line);padding:3px 8px;text-align:center}
     </div>
   </header>
   <div class="stage">
-    <div class="board" id="board" role="grid" aria-label="Board"></div>
+    <div class="board-wrap">
+      <div class="board" id="board" role="grid" aria-label="Board"></div>
+      <div class="promo-pop" id="promo-pop" role="dialog" aria-modal="true" hidden></div>
+    </div>
     <div class="legend">
       <span><i class="sw h"></i><span id="lg-home">starting ranks</span></span>
       <span><i class="sw g"></i><span id="lg-me">your combination</span></span>
@@ -720,6 +730,16 @@ function renderBoard(){
       +(i===7?`<span class="crd f">${FILES[c]}</span>`:'')+(j===0?`<span class="crd r">${8-r}</span>`:'')+'</button>';
   }
   document.getElementById('board').innerHTML=h;
+  /* Выбор превращения показываем поверх доски: в панели его легко не заметить, особенно на телефоне. */
+  const pop=document.getElementById('promo-pop');
+  if(S.promo&&!S.over&&!humanLocked()){
+    const t=S.turn;
+    pop.setAttribute('aria-label',l.swap);
+    pop.innerHTML=`<div class="card"><b>${l.swap}</b><p>${l.stPromo}</p><div class="chips">`
+      +S.reserve[t].map((o,i)=>o.t!=='P'?chip(o,i,t,'promo'):'').join('')
+      +`</div><div class="row"><button class="btn" data-act="nopromo">${S.promo.fresh?l.keepPawn:l.cancel}</button></div></div>`;
+    pop.hidden=false;
+  } else {pop.hidden=true;pop.innerHTML=''}
 }
 
 function chip(o,i,col,act){
@@ -766,11 +786,6 @@ function renderPanel(){
     if(!S.promo&&selRes===null&&kingExposed(S,t))st+=` <span class="warn">${l.kingExposedMe}</span>`;
     if(humanLocked())st=`<span class="thinking">${l.botThinking}</span>`;
     h+=`<div class="status" aria-live="polite">${st}</div>`;
-  }
-  if(S.promo&&!humanLocked()){
-    h+=`<section><h2>${l.swap}</h2><div class="chips">`;
-    S.reserve[t].forEach((o,i)=>{if(o.t!=='P')h+=chip(o,i,t,'promo')});
-    h+=`</div><div class="row" style="margin-top:8px"><button class="btn" data-act="nopromo">${S.promo.fresh?l.keepPawn:l.cancel}</button></div></section>`;
   }
   if(!S.over&&!S.promo&&!humanLocked()){
     h+=`<section><h2>${l.cashIn}</h2>`;
